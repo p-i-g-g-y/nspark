@@ -10,6 +10,39 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-05-12
+
+### Added
+- Full reference documentation under `docs/`:
+  - `architecture.md` — layering, lifetimes, transport, observability,
+    the two-claim model, trust assumptions.
+  - `lightning/receiving-invoices.md` — full receive flow with the
+    `ClaimPendingTransfersAsync` step called out as required.
+  - `lightning/paying-invoices.md` — BOLT11 + Lightning Address paths,
+    fee estimation, failure modes, idempotency.
+  - `lightning/description-hash.md` — NIP-57 zap-receiver pattern
+    with the two-claim flow honored.
+  - `signer.md` — `ISparkSigner` contract, when to write a custom one
+    (HSM / KMS / hardware), per-member implementation guide.
+  - `deposits.md` — single-use and static deposit flows, including the
+    two-claim sequence for static deposits
+    (`ClaimStaticDepositAsync` then `ClaimPendingTransfersAsync`).
+  - `withdrawals.md` — cooperative-exit flow, fee quote, idempotency
+    notes.
+  - `configuration.md` — every `SparkOptions` field documented.
+  - `faq.md`, `glossary.md`.
+- Suppressed `CA1873` repository-wide (joins `CA1848` — neither rule
+  fits NSpark's pattern of one-shot lifecycle logs with trivial
+  property-access arguments). Fixes the CI build on the latest
+  NetAnalyzers shipped on GitHub's Windows/macOS runners.
+
+### Fixed
+- Documentation URLs throughout the codebase now point at the public
+  repository `github.com/p-i-g-g-y/nspark` (no remaining references to
+  the pre-public path).
+
+## [0.1.0-alpha.1] - 2026-05-12
+
 ### Added
 - Multi-targeting: `net8.0;net9.0;net10.0`.
 - Central package management (`Directory.Packages.props`) and shared build
@@ -49,9 +82,6 @@ will be reflected here.
 - See [docs/trust-model.md](docs/trust-model.md) for the documented threat
   model and the default Signing Operator / SSP trust assumptions.
 
-## [0.1.0] - TBD
-
-Initial public preview.
-
-[Unreleased]: https://github.com/p-i-g-g-y/nspark/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.1.0
+[Unreleased]: https://github.com/p-i-g-g-y/nspark/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.1.0-alpha.2
+[0.1.0-alpha.1]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.1.0-alpha.1

@@ -1,0 +1,151 @@
+# Description-hash invoices and NIP-57 zaps
+
+BOLT11 invoices can carry either a free-form description (the `d` field)
+or a 32-byte SHA-256 commitment to a longer description (the `h` field).
+The hashed form is required for Nostr **NIP-57 zaps** — the invoice
+commits to the zap request event so the payer's wallet can be confident
+the payment is for the right Nostr note.
+
+NSpark supports description hashes via the `descriptionHash` parameter on
+`CreateLightningInvoiceAsync`.
+
+## Plain description-hash invoice
+
+```csharp
+var description = """{"comment":"thanks for the post"}""";
+byte[] hash = System.Security.Cryptography.SHA256.HashData(
+    System.Text.Encoding.UTF8.GetBytes(description));
+
+var invoice = await wallet.CreateLightningInvoiceAsync(
+    amountSats: 100,
+    descriptionHash: hash);
+
+Console.WriteLine(invoice.PaymentRequest);
+```
+
+The payer's wallet can verify `SHA256(description) == h(BOLT11)` before
+authorizing the payment, proving the invoice and description are bound.
+
+## NIP-57 (Nostr zap) receive flow
+
+NIP-57 specifies a Nostr-aware Lightning receiver — typically called a
+"zapper" — that:
+
+1. Receives a `kind:9734` "zap request" Nostr event.
+2. Computes `SHA256(serialized_event)` as the BOLT11 description hash.
+3. Issues an invoice for the amount the zap request asks for.
+4. After payment, publishes a `kind:9735` "zap receipt" Nostr event
+   linking the original request to the paid invoice.
+
+NSpark handles step 3 directly. Steps 1, 2, and 4 are application-level
+Nostr handling — NSpark has no Nostr dependency.
+
+### Minimal NIP-57 zap receiver
+
+```csharp
+using NSpark;
+using NSpark.Services;
+
+public sealed class ZapReceiver(SparkConnection spark, INostrPublisher nostr)
+{
+    public async Task<string> HandleZapRequest(
+        string zapRequestJson,
+        string recipientMnemonic,
+        CancellationToken ct = default)
+    {
+        // 1. Validate it's a kind:9734 event and extract the amount tag.
+        var (zapRequest, amountMsats) = NostrZap.Parse(zapRequestJson);
+        var amountSats = amountMsats / 1000;
+
+        // 2. Description hash = SHA-256 of the serialized event.
+        byte[] descriptionHash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(zapRequestJson));
+
+        // 3. Issue the invoice.
+        var wallet = spark.CreateWallet(recipientMnemonic);
+        var invoice = await wallet.CreateLightningInvoiceAsync(
+            amountSats: amountSats,
+            descriptionHash: descriptionHash,
+            ct: ct);
+
+        // 4. Kick off a background task that publishes the zap receipt
+        //    once the invoice is paid and claimed.
+        _ = ObserveAndPublishReceipt(
+            wallet, invoice.PaymentRequest!, zapRequest, ct);
+
+        return invoice.PaymentRequest!;
+    }
+
+    private async Task ObserveAndPublishReceipt(
+        SparkWallet wallet,
+        string paymentRequest,
+        NostrEvent zapRequest,
+        CancellationToken ct)
+    {
+        // Poll for the claim, then publish the receipt.
+        // Wait at most until the invoice expires.
+        while (!ct.IsCancellationRequested)
+        {
+            var claimed = await wallet.ClaimPendingTransfersAsync(ct);
+            foreach (var t in claimed)
+            {
+                if (t.Type == "PreimageSwap")
+                {
+                    // 5. Publish kind:9735 zap receipt referencing this transfer.
+                    await nostr.PublishZapReceipt(zapRequest, paymentRequest, t.Id);
+                    return;
+                }
+            }
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        }
+    }
+}
+```
+
+> The two-claim pattern from [`../architecture.md`](../architecture.md#the-two-claim-model)
+> applies here unchanged — the zap receipt should fire **after** the
+> claim succeeds, not on invoice creation.
+
+## Receiving on behalf of a third party (multi-recipient zappers)
+
+If you operate a custodial zapper that serves multiple Nostr identities
+out of one Spark wallet, route each payment to the recipient's own
+identity public key with `receiverIdentityPublicKey`:
+
+```csharp
+var recipientPubKey = ResolveNostrPubkeyToSparkPubkey(zapRequest.PubKey);
+
+var invoice = await issuerWallet.CreateLightningInvoiceAsync(
+    amountSats: amountSats,
+    descriptionHash: descriptionHash,
+    receiverIdentityPublicKey: recipientPubKey);
+```
+
+The payment lands as a pending transfer for the recipient wallet. The
+recipient wallet (driven by its own process or whenever the user logs in)
+calls `ClaimPendingTransfersAsync()` to materialize it.
+
+## What's in the BOLT11
+
+The encoded invoice carries:
+
+- The amount (in `lnbc…` HRP and the `9` tagged field).
+- The `h` tagged field with your 32-byte `descriptionHash`.
+- An `x` (expiry) field — defaults to 24 hours.
+- An `n` (payee node id) field — the SSP's Lightning node.
+- A `p` (payment hash) — generated by NSpark, committed to the FROST-
+  shared preimage.
+
+Verifying clients (Nostr or otherwise) read `h`, hash the description
+themselves, and compare. The payment is only considered "authentic" if
+the hashes match.
+
+## Validation
+
+NSpark does **not** validate that your `descriptionHash` is a real
+SHA-256 of anything specific — it just embeds the 32 bytes into the
+BOLT11 `h` field. The hash semantics (NIP-57 zap request, BOLT11
+description, anything else) are the caller's responsibility.
+
+If `descriptionHash` is not exactly 32 bytes, NSpark throws
+`SparkConfigurationException` before issuing the invoice.
