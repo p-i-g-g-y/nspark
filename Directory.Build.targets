@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Targets evaluated AFTER each project's own properties. Use this file for
+    rules that need to inspect project-level values like IsPackable, which
+    are not yet set when Directory.Build.props runs.
+  -->
+
+  <PropertyGroup Label="Warnings as errors gate">
+    <!-- Treat warnings as errors only for shipping packages. Test, sample,
+         and benchmark projects (IsPackable=false) get a looser ride so the
+         shape of test code doesn't have to mirror library conventions
+         (ConfigureAwait, CA1062, etc.). -->
+    <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release' and '$(IsPackable)' != 'false'">true</TreatWarningsAsErrors>
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true' and '$(IsPackable)' != 'false'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

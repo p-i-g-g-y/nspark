@@ -1,0 +1,125 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>NSpark</RootNamespace>
+    <AssemblyName>NSpark</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Package metadata: package-id and human-readable description.
+       Most other metadata (Authors, Copyright, RepositoryUrl, ...) comes from Directory.Build.props. -->
+  <PropertyGroup>
+    <PackageId>NSpark</PackageId>
+    <Title>NSpark</Title>
+    <Description>First-class .NET SDK for the Spark Lightning Network protocol — send and receive Bitcoin over Lightning with BOLT11 invoices, FROST threshold signing, and a clean DI-friendly API.</Description>
+    <PackageTags>lightning;bitcoin;spark;bolt11;ln;payments;frost;btc;sdk</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="NSpark.IntegrationTests" />
+    <InternalsVisibleTo Include="NSpark.UnitTests" />
+    <InternalsVisibleTo Include="NSpark.Benchmarks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
+  <!-- Versioning: MinVer reads the latest reachable `v*` git tag and stamps
+       AssemblyVersion / FileVersion / PackageVersion accordingly. Untagged
+       commits become a prerelease of the next minor (e.g. 0.2.0-alpha.0.N).
+       Tag with `git tag v0.1.0-alpha.1` and the release workflow publishes
+       NSpark.0.1.0-alpha.1.nupkg automatically. -->
+  <ItemGroup>
+    <PackageReference Include="MinVer">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerDefaultPreReleaseIdentifiers>alpha.0</MinVerDefaultPreReleaseIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+    <PackageReference Include="NBitcoin" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Polly" />
+  </ItemGroup>
+
+  <!-- Native FROST signing library, packaged at the canonical NuGet runtimes/{rid}/native/ path
+       so the .NET host resolves the platform binary automatically at consumer build time. -->
+  <ItemGroup>
+    <None Include="runtimes/osx-arm64/native/libspark_frost.dylib"
+          Pack="true" PackagePath="runtimes/osx-arm64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/osx-arm64/native/libspark_frost.dylib"
+          Condition="Exists('runtimes/osx-arm64/native/libspark_frost.dylib')" />
+    <None Include="runtimes/linux-x64/native/libspark_frost.so"
+          Pack="true" PackagePath="runtimes/linux-x64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/linux-x64/native/libspark_frost.so"
+          Condition="Exists('runtimes/linux-x64/native/libspark_frost.so')" />
+    <None Include="runtimes/osx-x64/native/libspark_frost.dylib"
+          Pack="true" PackagePath="runtimes/osx-x64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/osx-x64/native/libspark_frost.dylib"
+          Condition="Exists('runtimes/osx-x64/native/libspark_frost.dylib')" />
+    <None Include="runtimes/linux-arm64/native/libspark_frost.so"
+          Pack="true" PackagePath="runtimes/linux-arm64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/linux-arm64/native/libspark_frost.so"
+          Condition="Exists('runtimes/linux-arm64/native/libspark_frost.so')" />
+    <None Include="runtimes/win-x64/native/spark_frost.dll"
+          Pack="true" PackagePath="runtimes/win-x64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/win-x64/native/spark_frost.dll"
+          Condition="Exists('runtimes/win-x64/native/spark_frost.dll')" />
+    <None Include="runtimes/win-arm64/native/spark_frost.dll"
+          Pack="true" PackagePath="runtimes/win-arm64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="runtimes/win-arm64/native/spark_frost.dll"
+          Condition="Exists('runtimes/win-arm64/native/spark_frost.dll')" />
+  </ItemGroup>
+
+  <!-- Optional integrity manifest: SHA-256 of every shipped native binary. -->
+  <ItemGroup>
+    <None Include="runtimes/SHA256SUMS.txt"
+          Pack="true" PackagePath="runtimes/SHA256SUMS.txt"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('runtimes/SHA256SUMS.txt')" />
+  </ItemGroup>
+
+  <!-- Generated gRPC/protobuf types are an implementation detail of NSpark.
+       Access="Internal" keeps them out of the consumer's IntelliSense. -->
+  <ItemGroup>
+    <Protobuf Include="Proto/spark.proto" GrpcServices="Client" ProtoRoot="Proto" Access="Internal" />
+    <Protobuf Include="Proto/spark_authn.proto" GrpcServices="Client" ProtoRoot="Proto" Access="Internal" />
+    <Protobuf Include="Proto/spark_token.proto" GrpcServices="Client" ProtoRoot="Proto" Access="Internal" />
+    <Protobuf Include="Proto/common.proto" GrpcServices="None" ProtoRoot="Proto" Access="Internal" />
+    <Protobuf Include="Proto/multisig.proto" GrpcServices="None" ProtoRoot="Proto" Access="Internal" />
+    <Protobuf Include="Proto/validate/validate.proto" GrpcServices="None" ProtoRoot="Proto" Access="Internal" />
+  </ItemGroup>
+
+</Project>

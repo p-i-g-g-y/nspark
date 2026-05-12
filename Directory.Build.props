@@ -1,0 +1,61 @@
+<Project>
+
+  <!--
+    Repository-wide MSBuild defaults for NSpark.
+
+    Applied automatically to every project under this root. Project-specific
+    properties (PackageId, AssemblyName, TargetFrameworks) live in the
+    individual .csproj files.
+  -->
+
+  <PropertyGroup Label="Language">
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Recommended is the sane default for an existing codebase; tighten to
+         AllEnabledByDefault during Phase 5 (public API stabilization). -->
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Warnings">
+    <!-- Test, sample, and benchmark projects opt out of strict warnings;
+         see Directory.Build.targets where the gate is applied after each
+         project has set its own IsPackable flag. -->
+    <NoWarn>$(NoWarn);CA1062;CA1303;CA1707;CA1716;CA1848</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Build determinism and SourceLink">
+    <Deterministic>true</Deterministic>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Trimming and AOT readiness">
+    <!-- Trim analyzer fires on shipping libraries; AOT readiness is aspirational for v1. -->
+    <IsTrimmable Condition="'$(IsPackable)' == 'true'">true</IsTrimmable>
+    <EnableTrimAnalyzer Condition="'$(IsPackable)' == 'true'">true</EnableTrimAnalyzer>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Shared package metadata">
+    <Authors>OrkLabs S.A.S.</Authors>
+    <Company>OrkLabs S.A.S.</Company>
+    <Copyright>Copyright (c) $([System.DateTime]::UtcNow.Year) OrkLabs S.A.S. and NSpark contributors</Copyright>
+    <Product>NSpark</Product>
+    <PackageProjectUrl>https://github.com/piggy/spark-csharp-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/piggy/spark-csharp-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  </PropertyGroup>
+
+  <!-- SourceLink for any project that opts into packing. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" IsImplicitlyDefined="false" />
+  </ItemGroup>
+
+</Project>
