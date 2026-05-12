@@ -1,0 +1,105 @@
+name: Native build (cross-platform spark_frost)
+
+# Builds libspark_frost / spark_frost.dll for every supported RID directly
+# on the native CI runners (macos-latest, ubuntu-latest, windows-latest)
+# and emits a consolidated runtimes/ tree + SHA256SUMS.txt as a single
+# artifact. Run manually before a release to refresh the binaries
+# committed under src/NSpark/runtimes/.
+#
+# Code-signing (Authenticode / macOS notarization) is intentionally NOT
+# performed here for v0.x; the binaries ship unsigned with SHA-256
+# integrity check via runtimes/SHA256SUMS.txt and SLSA provenance on the
+# overall NuGet package. Add signing in a separate workflow once OrkLabs
+# acquires the certs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      spark_ref:
+        description: buildonspark/spark git ref to build (branch, tag, or SHA)
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+env:
+  SPARK_REPO: buildonspark/spark
+  SPARK_REF: ${{ github.event.inputs.spark_ref || 'main' }}
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: osx-arm64,   os: macos-latest,    target: aarch64-apple-darwin,      artifact: libspark_frost.dylib }
+          - { rid: osx-x64,     os: macos-13,        target: x86_64-apple-darwin,       artifact: libspark_frost.dylib }
+          - { rid: linux-x64,   os: ubuntu-latest,   target: x86_64-unknown-linux-gnu,  artifact: libspark_frost.so }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm,target: aarch64-unknown-linux-gnu, artifact: libspark_frost.so }
+          - { rid: win-x64,     os: windows-latest,  target: x86_64-pc-windows-msvc,    artifact: spark_frost.dll }
+          - { rid: win-arm64,   os: windows-latest,  target: aarch64-pc-windows-msvc,   artifact: spark_frost.dll }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SPARK_REPO }}
+          ref: ${{ env.SPARK_REF }}
+          path: spark
+
+      - name: Setup Rust toolchain (pinned by spark/signer/rust-toolchain.toml)
+        run: |
+          rustup show
+          rustup target add ${{ matrix.target }}
+        working-directory: spark/signer
+        shell: bash
+
+      - name: Build
+        run: cargo build --release -p spark-frost-uniffi --target ${{ matrix.target }}
+        working-directory: spark/signer
+
+      - name: Strip (Linux)
+        if: runner.os == 'Linux'
+        run: strip --strip-unneeded spark/signer/target/${{ matrix.target }}/release/${{ matrix.artifact }}
+
+      - name: Hash artifact
+        shell: bash
+        run: |
+          mkdir -p out/${{ matrix.rid }}/native
+          cp "spark/signer/target/${{ matrix.target }}/release/${{ matrix.artifact }}" \
+             "out/${{ matrix.rid }}/native/${{ matrix.artifact }}"
+          ( cd out && shasum -a 256 "${{ matrix.rid }}/native/${{ matrix.artifact }}" ) | tee out/${{ matrix.rid }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/
+          if-no-files-found: error
+
+  consolidate:
+    name: Consolidate + SHA256SUMS.txt
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: runtimes-staging
+          merge-multiple: true
+
+      - name: Generate consolidated SHA256SUMS.txt
+        run: |
+          cd runtimes-staging
+          find . -type f \( -name "*.dll" -o -name "*.so" -o -name "*.dylib" \) \
+            | sort | xargs shasum -a 256 \
+            | sed 's|  \./|  |' > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload consolidated runtimes/ tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtimes
+          path: runtimes-staging/
+          if-no-files-found: error

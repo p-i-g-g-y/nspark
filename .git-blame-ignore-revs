@@ -1,0 +1,14 @@
+# Revisions listed here are skipped by `git blame --ignore-revs-file` and by
+# GitHub's blame view automatically. Use for large mechanical reformats / renames
+# that would otherwise destroy authorship history.
+#
+# Append commit SHAs (with a comment line above each) when:
+#  - applying a repo-wide formatter
+#  - renaming the namespace from Spark.Client to NSpark
+#
+# Example:
+# # Rename Spark.Client -> NSpark (release plan Phase 6)
+# 0000000000000000000000000000000000000000
+
+# Rename Spark.Client -> NSpark across the codebase (release plan Phase 6)
+6269ee1f955537f7a014e136c9a2ef40796cb05b

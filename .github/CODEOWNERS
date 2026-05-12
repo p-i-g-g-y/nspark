@@ -1,0 +1,16 @@
+# NSpark code owners.
+# Lines below are processed top-to-bottom; the last matching pattern wins.
+
+*                                          @realbub
+
+# Native FROST build pipeline lives at the crate level; flag for review
+# whenever the .proto definitions, UniFFI bindings, or runtimes/** change.
+src/NSpark/Proto/**                        @realbub
+src/NSpark/Signer/SparkFrostBindings.cs    @realbub
+src/NSpark/runtimes/**                     @realbub
+
+# Security-sensitive files require maintainer sign-off.
+SECURITY.md                                @realbub
+docs/trust-model.md                        @realbub
+.github/workflows/release.yml              @realbub
+.github/workflows/native-build.yml         @realbub

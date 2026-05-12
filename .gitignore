@@ -1,0 +1,53 @@
+# Build output
+bin/
+obj/
+out/
+artifacts/
+
+# IDE
+.vs/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+*.swp
+.DS_Store
+
+# Test + coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+BenchmarkDotNet.Artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+nuget.exe
+packages/
+
+# Rider / ReSharper
+_ReSharper*/
+
+# Local environment
+.env
+.env.*
+!.env.local.example
+*.local
+!*.local.example
+secrets.json
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Native build intermediate (Rust)
+target/
+Cargo.lock.bak

@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in NSpark is broken or behaves unexpectedly.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please **do not** report
+        security vulnerabilities here — follow [SECURITY.md](../../SECURITY.md) instead.
+
+  - type: input
+    id: nspark-version
+    attributes:
+      label: NSpark version
+      placeholder: 0.1.0-alpha.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tfm
+    attributes:
+      label: Target framework
+      options: ["net8.0", "net9.0", "net10.0", "other (specify in details)"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: rid
+    attributes:
+      label: Runtime identifier
+      options: ["osx-arm64", "osx-x64", "linux-x64", "linux-arm64", "win-x64", "win-arm64", "other"]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network
+    attributes:
+      label: Spark network
+      options: ["Mainnet", "Regtest", "Both / N/A"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Smallest code sample that reproduces the issue.
+      render: csharp
+      placeholder: |
+        var options = Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet });
+        using var http = new HttpClient();
+        await using var spark = new SparkConnection(options, http);
+        // ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: Include any `EventId`s from `NSpark.Diagnostics.LogEvents` near the failure.
+      render: text

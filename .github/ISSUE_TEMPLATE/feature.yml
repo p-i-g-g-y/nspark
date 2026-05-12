@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a new feature or improvement.
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user / developer problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behavior
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, other libraries, existing patterns you already tried.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / breaking changes
+      description: Does this affect the public API surface? Should it land behind `[Experimental]`?

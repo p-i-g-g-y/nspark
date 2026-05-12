@@ -1,0 +1,36 @@
+# Auto-detect text files and perform LF normalization.
+* text=auto eol=lf
+
+# Force LF on text files we own.
+*.cs        text eol=lf diff=csharp
+*.csproj    text eol=lf
+*.props     text eol=lf
+*.targets   text eol=lf
+*.slnx      text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.proto     text eol=lf
+*.sh        text eol=lf
+*.editorconfig text eol=lf
+
+# Windows scripts keep CRLF.
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary native libraries — never touched by line-ending or diff machinery.
+*.dll       binary
+*.so        binary
+*.dylib     binary
+*.png       binary
+*.ico       binary
+*.snk       binary
+
+# Treat native runtimes as binary regardless of extension.
+runtimes/** binary
+
+# Linguist hints — exclude generated noise from GitHub language stats.
+src/**/Proto/**              linguist-generated=true
+src/**/SparkFrostBindings.cs linguist-generated=true

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NSpark/NSpark.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/NSpark.UnitTests/NSpark.UnitTests.csproj" />
+    <Project Path="tests/NSpark.IntegrationTests/NSpark.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/QuickStart/QuickStart.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/NSpark.Benchmarks/NSpark.Benchmarks.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,122 @@
+# EditorConfig for NSpark
+# https://editorconfig.org
+
+root = true
+
+###############################
+# All files
+###############################
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{cmd,bat}]
+end_of_line = crlf
+
+###############################
+# C# / .NET
+###############################
+[*.cs]
+indent_size = 4
+tab_width = 4
+
+# Encourage modern C# language idioms.
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning
+csharp_style_pattern_matching_over_as_with_null_check = true:warning
+csharp_style_inlined_variable_declaration = true:warning
+csharp_style_throw_expression = true:suggestion
+csharp_style_conditional_delegate_call = true:warning
+csharp_prefer_braces = true:warning
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_using_directive_placement = outside_namespace:warning
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+# Symbol naming.
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols  = private_fields
+dotnet_naming_rule.private_fields_underscore.style    = underscore_prefix
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_prefix.required_prefix = _
+dotnet_naming_style.underscore_prefix.capitalization = camel_case
+
+# .NET style.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access = true:warning
+dotnet_style_readonly_field = true:warning
+dotnet_style_require_accessibility_modifiers = always:warning
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_explicit_tuple_names = true:warning
+dotnet_style_null_propagation = true:warning
+dotnet_style_coalesce_expression = true:warning
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+
+# Specific analyzer severities.
+
+# CA1062: Validate arguments of public methods — useful, keep.
+dotnet_diagnostic.CA1062.severity = warning
+
+# CA2007: ConfigureAwait — required for a library.
+dotnet_diagnostic.CA2007.severity = warning
+
+# IDE0005: Unused using directives — error in CI.
+dotnet_diagnostic.IDE0005.severity = warning
+
+# CA1303: Do not pass literals as localized parameters — noisy for an infra lib.
+dotnet_diagnostic.CA1303.severity = none
+
+# CA1707: Identifiers should not contain underscores — noisy on EventIds / proto names.
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1716: Identifiers should not match keywords — not relevant for us.
+dotnet_diagnostic.CA1716.severity = none
+
+# CA1848: Use LoggerMessage delegates — we adopt source-generated logging; keep on.
+dotnet_diagnostic.CA1848.severity = suggestion
+
+# Documentation enforcement.
+dotnet_diagnostic.CS1591.severity = warning
+
+###############################
+# Generated files
+###############################
+[**/Proto/*.cs]
+generated_code = true
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.IDE0005.severity = none
+
+[**/Signer/SparkFrostBindings.cs]
+generated_code = true
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.IDE0005.severity = none
+
+###############################
+# Project / config / docs
+###############################
+[*.{csproj,props,targets,slnx,xml}]
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
