@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0  # MinVer needs full history once it's wired in
 
       - name: Setup .NET (multi-target)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: |
             8.0.x
@@ -83,7 +83,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
