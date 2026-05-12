@@ -72,7 +72,7 @@ jobs:
           ( cd out && shasum -a 256 "${{ matrix.rid }}/native/${{ matrix.artifact }}" ) | tee out/${{ matrix.rid }}.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.rid }}
           path: out/
@@ -98,7 +98,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Upload consolidated runtimes/ tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtimes
           path: runtimes-staging/
