@@ -41,7 +41,7 @@
 
   <!-- Resilience. -->
   <ItemGroup>
-    <PackageVersion Include="Polly" Version="8.5.2" />
+    <PackageVersion Include="Polly" Version="8.6.6" />
     <PackageVersion Include="Polly.Extensions" Version="8.5.2" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
   </ItemGroup>
