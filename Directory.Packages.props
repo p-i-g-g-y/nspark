@@ -72,7 +72,7 @@
 
   <!-- Benchmarks. -->
   <ItemGroup>
-    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 
 </Project>
