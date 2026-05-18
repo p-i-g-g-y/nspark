@@ -10,6 +10,27 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-05-18
+
+### Added
+- `LightningAddressService.ResolveLightningAddressAsync(wallet, lightningAddress, amountSats, ct)`
+  — resolves a `user@domain` Lightning address to a concrete BOLT11
+  invoice via LNURL-pay without paying it. Lets callers display a fee
+  estimate (pair with `GetLightningSendFeeEstimateAsync`) or otherwise
+  inspect the invoice before confirming. `PayLightningAddressAsync`
+  now delegates to it.
+
+### Fixed
+- `WithdrawalService.GetFeeQuoteAsync` was hard-coded to assume SSP fees
+  came back in millisats and divided by 1000 — that under-reported every
+  fee returned in `SATOSHI` by a factor of 1000 (a 1606-sat fee was
+  surfacing as 2 sats). The conversion now switches on the
+  `CurrencyAmount.original_unit` discriminator and handles all
+  Lightspark `CurrencyUnit` values (`SATOSHI`, `MILLISATOSHI`,
+  `BITCOIN`, `MILLIBITCOIN`, `MICROBITCOIN`, `NANOBITCOIN`), rounding
+  sub-sat units UP so the quote never under-quotes the SSP's required
+  fee. Mirrors Lightspark's reference `amount_as_msats`.
+
 ## [0.1.0-alpha.5] - 2026-05-18
 
 ### Changed (breaking — unshipped API)

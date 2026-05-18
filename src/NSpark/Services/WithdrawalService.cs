@@ -32,11 +32,34 @@ public static class WithdrawalService
         var response = await wallet.SspClient.ExecuteAsync<CoopExitFeeEstimateResponse>(
             Mutations.CoopExitFeeEstimate, variables, ct).ConfigureAwait(false);
 
+        // The SSP returns each fee as a CurrencyAmount with an `original_unit` discriminator and
+        // we MUST honour that unit — earlier NSpark builds blindly divided by 1000 (assumed the
+        // unit was always MILLISATOSHI) and reported a 1606-sat fee as 2 sats whenever the SSP
+        // answered in SATOSHI. The conversion factors below mirror Lightspark's reference
+        // `amount_as_msats` (python-sdk/lightspark/utils/currency_amount.py), scaled down by
+        // 1000 to land in sats. Fees < 1 sat (only possible for sub-sat units like NANOBITCOIN
+        // or MILLISATOSHI) round UP — under-quoting could cause the send to fail at execute time.
         var fast = response.CoopExitFeeEstimates.SpeedFast;
-        // Values are in millisats, convert to sats (round up)
-        var totalFeeSats = (fast.UserFee.OriginalValue + fast.L1BroadcastFee.OriginalValue + 999) / 1000;
-
+        var totalFeeSats = ToSats(fast.UserFee) + ToSats(fast.L1BroadcastFee);
         return new FeeQuote(FeeSats: totalFeeSats, FeeRateSatsPerVbyte: 0);
+
+        static long ToSats(CoopExitFeeValue v)
+        {
+            // Match Lightspark's CurrencyUnit enum casing exactly — the SSP echoes those strings.
+            return (v.OriginalUnit ?? string.Empty).ToUpperInvariant() switch
+            {
+                "SATOSHI" => v.OriginalValue,
+                "MILLISATOSHI" => (v.OriginalValue + 999) / 1000,
+                "BITCOIN" => v.OriginalValue * 100_000_000L,
+                "MILLIBITCOIN" => v.OriginalValue * 100_000L,
+                "MICROBITCOIN" => v.OriginalValue * 100L,
+                "NANOBITCOIN" => (v.OriginalValue + 9) / 10,
+                // Unknown unit (e.g. fiat or a future Lightspark-added value): treat as sats so
+                // we still produce *some* answer. The SSP doesn't return fiat units for L1 fees
+                // in practice, but defaulting to sats matches what Swift does on the same path.
+                _ => v.OriginalValue,
+            };
+        }
     }
 
     /// <summary>

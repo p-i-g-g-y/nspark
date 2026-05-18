@@ -6,16 +6,25 @@ namespace NSpark.Services;
 public static class LightningAddressService
 {
     /// <summary>
-    /// Pay a Lightning address (user@domain) by resolving it via LNURL-pay protocol:
-    /// 1. GET https://domain/.well-known/lnurlp/user → { callback, minSendable, maxSendable }
-    /// 2. GET callback?amount={millisats} → { pr: "lnbc..." }
-    /// 3. Pay the BOLT11 invoice via PayLightningInvoiceAsync
+    /// Resolve a Lightning address (<c>user@domain</c>) to a concrete BOLT11 invoice for a given
+    /// amount, by walking the LNURL-pay protocol:
+    /// <list type="number">
+    ///   <item>GET <c>https://domain/.well-known/lnurlp/user</c> → <c>{ callback, minSendable, maxSendable }</c></item>
+    ///   <item>GET <c>callback?amount={millisats}</c> → <c>{ pr: "lnbc..." }</c></item>
+    /// </list>
+    /// Useful for callers that want to display a fee estimate or otherwise inspect the BOLT11
+    /// before sending. Pair with <see cref="LightningService.GetLightningSendFeeEstimateAsync"/>
+    /// to show the user a final invoice fee before they confirm.
     /// </summary>
-    public static async Task<string> PayLightningAddressAsync(
+    /// <param name="wallet">The Spark wallet (used only for its <see cref="SparkConnection.HttpClient"/>; no signing).</param>
+    /// <param name="lightningAddress">Address in <c>user@domain</c> form.</param>
+    /// <param name="amountSats">Amount to encode in the requested BOLT11.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The BOLT11 payment request string returned by the LNURL-pay callback.</returns>
+    public static async Task<string> ResolveLightningAddressAsync(
         this SparkWallet wallet,
         string lightningAddress,
         long amountSats,
-        long? maxFeeSats = null,
         CancellationToken ct = default)
     {
         var parts = lightningAddress.Split('@', 2);
@@ -52,10 +61,22 @@ public static class LightningAddressService
         var invoiceJson = await http.GetStringAsync(invoiceUrl, ct).ConfigureAwait(false);
         using var invoiceDoc = JsonDocument.Parse(invoiceJson);
 
-        var pr = invoiceDoc.RootElement.GetProperty("pr").GetString()
+        return invoiceDoc.RootElement.GetProperty("pr").GetString()
             ?? throw new InvalidOperationException("LNURL-pay callback response missing 'pr'.");
+    }
 
-        // Step 3: Pay the invoice
+    /// <summary>
+    /// Pay a Lightning address (<c>user@domain</c>): resolve via LNURL-pay then pay the resulting
+    /// BOLT11 via <see cref="LightningService.PayLightningInvoiceAsync"/>.
+    /// </summary>
+    public static async Task<string> PayLightningAddressAsync(
+        this SparkWallet wallet,
+        string lightningAddress,
+        long amountSats,
+        long? maxFeeSats = null,
+        CancellationToken ct = default)
+    {
+        var pr = await wallet.ResolveLightningAddressAsync(lightningAddress, amountSats, ct).ConfigureAwait(false);
         return await wallet.PayLightningInvoiceAsync(pr, maxFeeSats, ct).ConfigureAwait(false);
     }
 }
