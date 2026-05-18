@@ -10,6 +10,47 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-05-18
+
+### Changed (breaking — unshipped API)
+- `LightningService.GetLightningSendStatusAsync` now takes the SSP
+  **request id** (the string returned from `PayLightningInvoiceAsync`)
+  instead of the BOLT11 payment hash. The underlying GraphQL endpoint
+  (`spark_lightning_payment`) was removed; status now flows through
+  the polymorphic `user_request` query alongside Lightning receives.
+  Only present on unshipped public API, so no SemVer-stable consumer
+  is affected.
+- The returned `LightningSendStatus.PaymentHash` is now an empty
+  string — the new GraphQL projection on `LightningSendRequest` does
+  not expose `payment_hash`. Callers that need the hash must keep
+  their own `requestId ↔ paymentHash` mapping (it's available on the
+  invoice you paid).
+- Known `LightningSendRequestStatus` values are now documented on the
+  method (`CREATED`, `REQUEST_VALIDATED`, `LIGHTNING_PAYMENT_INITIATED`,
+  `LIGHTNING_PAYMENT_SUCCEEDED`/`FAILED`, `PREIMAGE_PROVIDED`/`PROVIDING_FAILED`,
+  `TRANSFER_COMPLETED`/`FAILED`, `USER_TRANSFER_VALIDATION_FAILED`,
+  `USER_SWAP_RETURNED`/`RETURN_FAILED`). Treat unknown values as still
+  in flight — Spark reserves the right to add new ones.
+
+### Fixed
+- `GetLightningReceiveRequestStatusAsync` no longer returns a stray
+  status string when the caller mistakenly passes a `LightningSendRequest`
+  id (and vice-versa for `GetLightningSendStatusAsync`). Each method now
+  verifies the polymorphic `__typename` and returns `null` for the wrong
+  type rather than misinterpreting the payload.
+- Fee millisatoshi→satoshi conversion: `LightningSendRequest.fee` is
+  delivered in millisats; `GetLightningSendStatusAsync` now rounds up
+  to whole sats, matching `GetLightningSendFeeEstimateAsync`.
+
+### Added
+- Integration test
+  `LightningTests.GetLightningSendStatus_should_track_a_send_to_terminal`
+  asserts:
+  1. Unknown request ids return `null`.
+  2. Receive-request ids return `null` (type-guard).
+  3. A real A→B send transitions through known statuses to a terminal
+     value within a 1-minute window.
+
 ## [0.1.0-alpha.4] - 2026-05-17
 
 ### Fixed

@@ -14,17 +14,6 @@ internal static class Queries
         }
         """;
 
-    public const string GetLightningPaymentStatus = """
-        query GetLightningPaymentStatus($paymentHash: String!) {
-            spark_lightning_payment(payment_hash: $paymentHash) {
-                payment_hash
-                status
-                fee_sats
-                preimage
-            }
-        }
-        """;
-
     public const string GetUserRequest = """
         query GetUserRequest($request_id: ID!) {
             user_request(request_id: $request_id) {
@@ -33,6 +22,17 @@ internal static class Queries
                     lightning_receive_request_id: id
                     lightning_receive_request_status: status
                     lightning_receive_request_receiver_identity_public_key: receiver_identity_public_key
+                }
+                ... on LightningSendRequest {
+                    lightning_send_request_id: id
+                    lightning_send_request_status: status
+                    lightning_send_request_encoded_invoice: encoded_invoice
+                    lightning_send_request_fee: fee {
+                        original_value
+                        original_unit
+                    }
+                    lightning_send_request_idempotency_key: idempotency_key
+                    lightning_send_request_payment_preimage: payment_preimage
                 }
             }
         }

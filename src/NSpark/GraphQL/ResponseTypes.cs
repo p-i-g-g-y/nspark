@@ -133,22 +133,29 @@ internal sealed record SwapInboundTransferData(
 internal sealed record SwapLeafData(
     [property: JsonPropertyName("swap_leaf_leaf_id")] string LeafId);
 
-// spark_lightning_payment response chain (outgoing Lightning send status)
-internal sealed record GetLightningPaymentStatusResponse(
-    [property: JsonPropertyName("spark_lightning_payment")] LightningPaymentStatusData? SparkLightningPayment);
-
-internal sealed record LightningPaymentStatusData(
-    [property: JsonPropertyName("payment_hash")] string PaymentHash,
-    [property: JsonPropertyName("status")] string Status,
-    [property: JsonPropertyName("fee_sats")] long? FeeSats,
-    [property: JsonPropertyName("preimage")] string? Preimage);
-
-// user_request response chain (polymorphic — only LightningReceiveRequest mapped)
+// user_request response chain (polymorphic — LightningReceiveRequest + LightningSendRequest)
 internal sealed record GetUserRequestResponse(
     [property: JsonPropertyName("user_request")] UserRequestData? UserRequest);
 
 internal sealed record UserRequestData(
     [property: JsonPropertyName("__typename")] string TypeName,
-    [property: JsonPropertyName("lightning_receive_request_id")] string? Id,
-    [property: JsonPropertyName("lightning_receive_request_status")] string? Status,
-    [property: JsonPropertyName("lightning_receive_request_receiver_identity_public_key")] string? ReceiverIdentityPublicKey);
+    // LightningReceiveRequest fields (aliased server-side to the lightning_receive_request_* keys)
+    [property: JsonPropertyName("lightning_receive_request_id")] string? ReceiveId,
+    [property: JsonPropertyName("lightning_receive_request_status")] string? ReceiveStatus,
+    [property: JsonPropertyName("lightning_receive_request_receiver_identity_public_key")] string? ReceiverIdentityPublicKey,
+    // LightningSendRequest fields
+    [property: JsonPropertyName("lightning_send_request_id")] string? SendId,
+    [property: JsonPropertyName("lightning_send_request_status")] string? SendStatus,
+    [property: JsonPropertyName("lightning_send_request_encoded_invoice")] string? SendEncodedInvoice,
+    [property: JsonPropertyName("lightning_send_request_fee")] CurrencyAmountData? SendFee,
+    [property: JsonPropertyName("lightning_send_request_idempotency_key")] string? SendIdempotencyKey,
+    [property: JsonPropertyName("lightning_send_request_payment_preimage")] string? SendPaymentPreimage)
+{
+    // Back-compat shims so older internal call sites that read `.Status`/`.Id` still compile.
+    [JsonIgnore] public string? Status => ReceiveStatus ?? SendStatus;
+    [JsonIgnore] public string? Id => ReceiveId ?? SendId;
+}
+
+internal sealed record CurrencyAmountData(
+    [property: JsonPropertyName("original_value")] long OriginalValue,
+    [property: JsonPropertyName("original_unit")] string? OriginalUnit);

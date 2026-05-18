@@ -131,31 +131,85 @@ public static class LightningService
             new Dictionary<string, object> { ["request_id"] = requestId },
             ct).ConfigureAwait(false);
 
-        return response.UserRequest?.Status;
+        var data = response.UserRequest;
+        if (data is null)
+        {
+            return null;
+        }
+        // Only return a status for the receive variant — otherwise the caller (typically the
+        // invoice poller) would treat a send-request status string as a receive status and
+        // misinterpret it.
+        return string.Equals(data.TypeName, "LightningReceiveRequest", StringComparison.Ordinal)
+            ? data.ReceiveStatus
+            : null;
     }
 
     /// <summary>
-    /// Query the SSP for the status of an outgoing Lightning payment by its BOLT11 payment hash
-    /// (lowercase hex SHA-256 of the HTLC preimage, 64 chars).
-    /// Returns null if the SSP has no record (e.g., the hash was never paid through it).
+    /// Query the SSP for the status of an outgoing Lightning payment by its SSP request id (the
+    /// string returned from <see cref="PayLightningInvoiceAsync"/>). Returns null if the SSP has
+    /// no record of the request id, or if the request id resolves to a non-send request type
+    /// (e.g., a Lightning receive request).
+    /// <para>
+    /// Known status values are listed on Spark's <c>LightningSendRequestStatus</c> enum and
+    /// include (non-exhaustive): <c>CREATED</c>, <c>REQUEST_VALIDATED</c>,
+    /// <c>LIGHTNING_PAYMENT_INITIATED</c>, <c>LIGHTNING_PAYMENT_SUCCEEDED</c>,
+    /// <c>LIGHTNING_PAYMENT_FAILED</c>, <c>PREIMAGE_PROVIDED</c>, <c>PREIMAGE_PROVIDING_FAILED</c>,
+    /// <c>TRANSFER_COMPLETED</c>, <c>TRANSFER_FAILED</c>, <c>USER_TRANSFER_VALIDATION_FAILED</c>,
+    /// <c>USER_SWAP_RETURNED</c>, <c>USER_SWAP_RETURN_FAILED</c>. Treat any value not yet on this
+    /// list as still in flight — Spark explicitly reserves the right to add new ones.
+    /// </para>
+    /// <para>
     /// While the payment is in flight <see cref="LightningSendStatus.FeeSats"/> and
-    /// <see cref="LightningSendStatus.Preimage"/> are null; both are populated once status flips
-    /// to <c>SUCCEEDED</c>.
+    /// <see cref="LightningSendStatus.Preimage"/> are null; the fee is reported once the SSP
+    /// finalises pricing and the preimage appears once status reaches one of the succeeded states.
+    /// </para>
     /// </summary>
     public static async Task<LightningSendStatus?> GetLightningSendStatusAsync(
         this SparkWallet wallet,
-        string paymentHash,
+        string requestId,
         CancellationToken ct = default)
     {
-        var response = await wallet.SspClient.ExecuteAsync<GetLightningPaymentStatusResponse>(
-            Queries.GetLightningPaymentStatus,
-            new Dictionary<string, object> { ["paymentHash"] = paymentHash },
+        var response = await wallet.SspClient.ExecuteAsync<GetUserRequestResponse>(
+            Queries.GetUserRequest,
+            new Dictionary<string, object> { ["request_id"] = requestId },
             ct).ConfigureAwait(false);
 
-        var data = response.SparkLightningPayment;
-        return data is null
-            ? null
-            : new LightningSendStatus(data.PaymentHash, data.Status, data.FeeSats, data.Preimage);
+        var data = response.UserRequest;
+        if (data is null)
+        {
+            return null;
+        }
+
+        // user_request is polymorphic. We only care about the LightningSendRequest variant; anyone
+        // querying the wrong id type gets a null back.
+        if (!string.Equals(data.TypeName, "LightningSendRequest", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(data.SendStatus))
+        {
+            return null;
+        }
+
+        // fee.original_value is denominated in millisats — convert to sats (round up to match
+        // the convention used by GetLightningSendFeeEstimateAsync).
+        long? feeSats = null;
+        if (data.SendFee is { } fee)
+        {
+            var unit = fee.OriginalUnit ?? string.Empty;
+            feeSats = unit.Equals("MILLISATOSHI", StringComparison.OrdinalIgnoreCase)
+                ? (fee.OriginalValue + 999) / 1000
+                : fee.OriginalValue; // already sats (or unknown unit, best-effort)
+        }
+
+        // The SSP's payment-hash field doesn't appear on LightningSendRequest, so we don't have it
+        // here. Callers that need it must keep the (request_id ↔ payment_hash) mapping themselves.
+        return new LightningSendStatus(
+            PaymentHash: string.Empty,
+            Status: data.SendStatus,
+            FeeSats: feeSats,
+            Preimage: data.SendPaymentPreimage);
     }
 
     /// <summary>

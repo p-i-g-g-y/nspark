@@ -385,6 +385,67 @@ public class LightningTests
         Assert.That(paymentId, Is.Not.Empty);
         TestContext.Out.WriteLine($"External payment ID: {paymentId}");
     }
+
+    [Test, Explicit("Requires funded Wallet A (>= 100 sats)")]
+    public async Task GetLightningSendStatus_should_track_a_send_to_terminal()
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CurrentContext.CancellationToken);
+        cts.CancelAfter(Timeout);
+
+        var balanceBefore = await _walletA.GetBalanceAsync(cts.Token);
+        if (balanceBefore.SatsBalance.Available < 100)
+        {
+            Assert.Inconclusive($"WalletA needs >= 100 sats (has {balanceBefore.SatsBalance.Available})");
+            return;
+        }
+
+        // Sanity: an obviously-bogus request id MUST return null, not throw.
+        var bogus = await _walletA.GetLightningSendStatusAsync(Guid.NewGuid().ToString(), cts.Token);
+        Assert.That(bogus, Is.Null, "GetLightningSendStatusAsync should return null for unknown request ids");
+
+        // Querying with a *receive* request id MUST also return null — the method is send-only.
+        var receiveInvoice = await _walletB.CreateLightningInvoiceAsync(10, memo: "send-status receive-id guard", ct: cts.Token);
+        Assert.That(receiveInvoice.RequestId, Is.Not.Null.And.Not.Empty);
+        var wrongType = await _walletA.GetLightningSendStatusAsync(receiveInvoice.RequestId!, cts.Token);
+        Assert.That(wrongType, Is.Null,
+            "GetLightningSendStatusAsync called with a LightningReceiveRequest id must return null");
+
+        // Real send: pay a fresh invoice from A → B and poll until status reaches one of the
+        // expected terminal-or-near-terminal values. We don't strictly assert SUCCEEDED because
+        // mainnet routing latency varies; reaching any non-pending state proves the query works.
+        var invoice = await _walletB.CreateLightningInvoiceAsync(10, memo: "send-status integration", ct: cts.Token);
+        var requestId = await _walletA.PayLightningInvoiceAsync(invoice.PaymentRequest, maxFeeSats: 50, ct: cts.Token);
+        Assert.That(requestId, Is.Not.Empty);
+        TestContext.Out.WriteLine($"Send request id: {requestId}");
+
+        var pendingStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CREATED", "REQUEST_VALIDATED", "LIGHTNING_PAYMENT_INITIATED", "PENDING_USER_SWAP_RETURN",
+        };
+        var terminalStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "LIGHTNING_PAYMENT_SUCCEEDED", "TRANSFER_COMPLETED", "PREIMAGE_PROVIDED",
+            "LIGHTNING_PAYMENT_FAILED", "TRANSFER_FAILED", "PREIMAGE_PROVIDING_FAILED",
+            "USER_TRANSFER_VALIDATION_FAILED", "USER_SWAP_RETURNED", "USER_SWAP_RETURN_FAILED",
+        };
+
+        NSpark.Models.LightningSendStatus? last = null;
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(1);
+        while (DateTime.UtcNow < deadline)
+        {
+            last = await _walletA.GetLightningSendStatusAsync(requestId, cts.Token);
+            Assert.That(last, Is.Not.Null, "GetLightningSendStatusAsync should return a status for a real send");
+            TestContext.Out.WriteLine($"  status={last!.Status} fee={last.FeeSats?.ToString() ?? "(null)"} preimage={(last.Preimage is null ? "(null)" : "set")}");
+            if (terminalStatuses.Contains(last.Status)) break;
+            Assert.That(pendingStatuses.Contains(last.Status), Is.True,
+                $"Unexpected (non-terminal, non-pending) status '{last.Status}' — Spark may have added a new enum value");
+            await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+        }
+
+        Assert.That(last, Is.Not.Null);
+        Assert.That(terminalStatuses.Contains(last!.Status), Is.True,
+            $"Status never reached a terminal value within the test window (last='{last.Status}')");
+    }
 }
 
 // =============================================================================
