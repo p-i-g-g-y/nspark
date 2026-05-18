@@ -107,7 +107,7 @@ public static class TransferService
                 network: networkStr,
                 sequence: normalSeq,
                 directSequence: normalDirectSeq,
-                feeSats: 0);
+                feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // FROST sign cpfp refund
             cpfpRefundJobs.Add(FrostSigningHelper.BuildSigningJob(

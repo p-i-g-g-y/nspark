@@ -216,7 +216,7 @@ public static class LightningService
     private const uint DirectTimelockOffset = 50;
     private const uint LightningHtlcSequence = 2160;
     // DEFAULT_FEE_SATS = ESTIMATED_TX_SIZE(191) * DEFAULT_SATS_PER_VBYTE(5)
-    private const ulong DefaultFeeSats = 955;
+    private const ulong DefaultFeeSats = SparkConstants.DefaultRefundFeeSats;
 
     /// <summary>
     /// Pay a Lightning invoice via the v3 preimage swap flow.
@@ -507,7 +507,9 @@ public static class LightningService
                 network: networkStr,
                 sequence: normalSeq,
                 directSequence: normalDirectSeq,
-                feeSats: 0);
+                // Only the cpfp refund is submitted in this swap path, but value must still
+                // match SSP expectation.
+                feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Only cpfp goes into transfer.leavesToSend (direct/directFromCpfp omitted per ref SDK)
             swapCpfpJobs.Add(FrostSigningHelper.BuildSigningJob(

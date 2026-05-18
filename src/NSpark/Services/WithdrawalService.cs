@@ -118,7 +118,9 @@ public static class WithdrawalService
                 network: networkStr,
                 sequence: cpfpSequence,
                 directSequence: directSequence,
-                feeSats: 0);
+                // SSP validates all three refund outputs on coop-exit and rejects with
+                // "expected value X on output 0" if the standard fee isn't deducted.
+                feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Add connector input to each refund tx
             var connectorInput = MakeConnectorInputBytes(connectorTxId, (uint)i);

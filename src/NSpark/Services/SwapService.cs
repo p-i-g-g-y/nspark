@@ -214,7 +214,9 @@ public static class SwapService
                 network: networkStr,
                 sequence: cpfpSequence,
                 directSequence: directSequence,
-                feeSats: 0);
+                // Only the cpfp branch is submitted for swaps today, but value mismatch
+                // would still trip the SO check.
+                feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Build signing job with adaptor key (only cpfp for swap)
             var (job, selfCommitment, sighash) = FrostSigningHelper.BuildSigningJobWithAdaptor(

@@ -20,7 +20,7 @@ public static class DepositService
 {
     private const uint InitialRefundSequence = 2000;
     private const uint DirectTimelockOffset = 50;
-    private const ulong DefaultFeeSats = 955; // 191 vbytes × 5 sat/vbyte
+    private const ulong DefaultFeeSats = SparkConstants.DefaultRefundFeeSats; // 191 vbytes × 5 sat/vbyte
 
     /// <summary>
     /// Generate a deposit address for receiving on-chain BTC into the Spark wallet.

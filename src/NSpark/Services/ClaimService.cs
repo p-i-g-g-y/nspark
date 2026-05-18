@@ -169,7 +169,7 @@ public static class ClaimService
                 network: networkStr,
                 sequence: claimSeq,
                 directSequence: claimDirectSeq,
-                feeSats: 0);
+                feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Commitments are interleaved: [leaf0_r0, leaf1_r0, ..., leaf0_r1, leaf1_r1, ...]
             var cpfpCommitments = allCommitments[i].SigningNonceCommitments;

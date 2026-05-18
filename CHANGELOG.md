@@ -10,6 +10,36 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-05-17
+
+### Fixed
+- SSP-rejected refund-tx construction in five hot paths. The SSP validates
+  every refund tx and rejects with `"expected value X on output 0"` when
+  the refund output value isn't decremented by the standard Bitcoin-network
+  fee (191 vbytes × 5 sat/vbyte = 955 sats). The previous code was passing
+  `feeSats: 0` in:
+  - `ClaimService.ClaimSingleTransferAsync` (incoming-transfer claim refund)
+  - `LightningService.PayLightningInvoiceAsync` (v3 preimage-swap refund)
+  - `SwapService.ProcessSwapBatchAsync` (swap-output refund)
+  - `TransferService.SendAsync` (sender-side refund)
+  - `WithdrawalService.WithdrawAsync` (cooperative-exit refund)
+
+  All now use the single `SparkConstants.DefaultRefundFeeSats` constant.
+  Verified end-to-end against the live SSP: Lightning send debits exactly
+  `invoiceAmount + SSP routing fee` (no 955-sat surcharge to the user
+  balance — the 955 is the on-chain miner fee that would only apply in a
+  unilateral exit broadcast).
+
+### Changed
+- `DepositService.DefaultFeeSats` (and the equivalent local constant in
+  `LightningService`) now point at `SparkConstants.DefaultRefundFeeSats`
+  so all flows reference one source of truth.
+
+### Added
+- `NSpark.Services.SparkConstants` (internal) — centralizes the
+  `DefaultRefundFeeSats = 191 × 5 = 955` constant. Internal-only, no
+  public-API surface change.
+
 ## [0.1.0-alpha.3] - 2026-05-17
 
 ### Added
