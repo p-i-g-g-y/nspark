@@ -135,6 +135,30 @@ public static class LightningService
     }
 
     /// <summary>
+    /// Query the SSP for the status of an outgoing Lightning payment by its BOLT11 payment hash.
+    /// Returns null if the SSP has no record (e.g., the hash was never paid through it).
+    /// While the payment is in flight <see cref="LightningSendStatus.FeeSats"/> and
+    /// <see cref="LightningSendStatus.Preimage"/> are null; both are populated once status flips
+    /// to <c>SUCCEEDED</c>.
+    /// </summary>
+    /// <param name="paymentHash">Lowercase hex SHA-256 of the HTLC preimage (64 chars).</param>
+    public static async Task<LightningSendStatus?> GetLightningSendStatusAsync(
+        this SparkWallet wallet,
+        string paymentHash,
+        CancellationToken ct = default)
+    {
+        var response = await wallet.SspClient.ExecuteAsync<GetLightningPaymentStatusResponse>(
+            Queries.GetLightningPaymentStatus,
+            new Dictionary<string, object> { ["paymentHash"] = paymentHash },
+            ct).ConfigureAwait(false);
+
+        var data = response.SparkLightningPayment;
+        return data is null
+            ? null
+            : new LightningSendStatus(data.PaymentHash, data.Status, data.FeeSats, data.Preimage);
+    }
+
+    /// <summary>
     /// Get a fee estimate for sending a Lightning payment.
     /// Returns estimated fee in satoshis.
     /// </summary>

@@ -133,6 +133,16 @@ internal sealed record SwapInboundTransferData(
 internal sealed record SwapLeafData(
     [property: JsonPropertyName("swap_leaf_leaf_id")] string LeafId);
 
+// spark_lightning_payment response chain (outgoing Lightning send status)
+internal sealed record GetLightningPaymentStatusResponse(
+    [property: JsonPropertyName("spark_lightning_payment")] LightningPaymentStatusData? SparkLightningPayment);
+
+internal sealed record LightningPaymentStatusData(
+    [property: JsonPropertyName("payment_hash")] string PaymentHash,
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("fee_sats")] long? FeeSats,
+    [property: JsonPropertyName("preimage")] string? Preimage);
+
 // user_request response chain (polymorphic — only LightningReceiveRequest mapped)
 internal sealed record GetUserRequestResponse(
     [property: JsonPropertyName("user_request")] UserRequestData? UserRequest);
