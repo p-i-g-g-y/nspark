@@ -10,6 +10,36 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-05-18
+
+### Fixed
+- Unified `CurrencyAmount → sats` conversion across all three SSP fee
+  call sites. `WithdrawalService.GetFeeQuoteAsync` already honoured the
+  `original_unit` discriminator (alpha.6), but
+  `LightningService.GetLightningSendFeeEstimateAsync` had a hard-coded
+  `(millisats + 999) / 1000` (the GraphQL query didn't even request
+  `original_unit`) and `GetLightningSendStatusAsync` only handled
+  `MILLISATOSHI` explicitly, defaulting other units to sats-as-sats.
+  Both would have under-quoted by 1000× if the SSP ever switched these
+  fields to `SATOSHI` — exactly the same latent bug alpha.6 fixed on
+  the withdrawal side. Both now route through
+  `NSpark.GraphQL.CurrencyAmountExtensions.ToSats(value, unit)` with
+  full unit support (SATOSHI, MILLISATOSHI, BITCOIN, MILLIBITCOIN,
+  MICROBITCOIN, NANOBITCOIN).
+- `Queries.LightningSendFeeEstimate` GraphQL now requests
+  `original_unit` alongside `original_value` so the discriminator is
+  observable.
+
+### Changed
+- `WithdrawalService.GetFeeQuoteAsync` no longer has its own inline
+  `ToSats` switch — uses the shared helper.
+
+### Tests
+- `ShouldGetWithdrawalFeeEstimate` now asserts `fee > 100 sats` (was
+  `> 0`). The alpha.5 silent regression returned 2 sats and passed the
+  old assertion; the tightened threshold catches any future unit
+  mishandling.
+
 ## [0.1.0-alpha.6] - 2026-05-18
 
 ### Added

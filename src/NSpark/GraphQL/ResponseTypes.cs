@@ -112,7 +112,8 @@ internal sealed record LightningSendFeeEstimateData(
     [property: JsonPropertyName("fee_estimate")] LightningSendFeeEstimateValue FeeEstimate);
 
 internal sealed record LightningSendFeeEstimateValue(
-    [property: JsonPropertyName("original_value")] long OriginalValue);
+    [property: JsonPropertyName("original_value")] long OriginalValue,
+    [property: JsonPropertyName("original_unit")] string? OriginalUnit);
 
 // request_swap response chain
 internal sealed record RequestSwapResponse(

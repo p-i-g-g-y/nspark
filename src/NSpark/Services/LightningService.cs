@@ -192,16 +192,11 @@ public static class LightningService
             return null;
         }
 
-        // fee.original_value is denominated in millisats — convert to sats (round up to match
-        // the convention used by GetLightningSendFeeEstimateAsync).
-        long? feeSats = null;
-        if (data.SendFee is { } fee)
-        {
-            var unit = fee.OriginalUnit ?? string.Empty;
-            feeSats = unit.Equals("MILLISATOSHI", StringComparison.OrdinalIgnoreCase)
-                ? (fee.OriginalValue + 999) / 1000
-                : fee.OriginalValue; // already sats (or unknown unit, best-effort)
-        }
+        // Honour the SSP's CurrencyAmount unit discriminator — same dispatch as
+        // GetLightningSendFeeEstimateAsync / WithdrawalService.GetFeeQuoteAsync.
+        long? feeSats = data.SendFee is { } fee
+            ? CurrencyAmountExtensions.ToSats(fee.OriginalValue, fee.OriginalUnit)
+            : null;
 
         // The SSP's payment-hash field doesn't appear on LightningSendRequest, so we don't have it
         // here. Callers that need it must keep the (request_id ↔ payment_hash) mapping themselves.
@@ -231,9 +226,10 @@ public static class LightningService
         var response = await wallet.SspClient.ExecuteAsync<LightningSendFeeEstimateResponse>(
             Queries.LightningSendFeeEstimate, variables, ct).ConfigureAwait(false);
 
-        // Value is in millisats — convert to sats (round up)
-        var millisats = response.LightningSendFeeEstimate.FeeEstimate.OriginalValue;
-        return (millisats + 999) / 1000;
+        // Honour the SSP's CurrencyAmount unit discriminator — the same field can come back as
+        // SATOSHI or MILLISATOSHI depending on the route. See GraphQL.CurrencyAmountExtensions.
+        var fee = response.LightningSendFeeEstimate.FeeEstimate;
+        return CurrencyAmountExtensions.ToSats(fee.OriginalValue, fee.OriginalUnit);
     }
 
     /// <summary>

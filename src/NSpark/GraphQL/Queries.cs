@@ -44,7 +44,7 @@ internal static class Queries
                 encoded_invoice: $encoded_invoice,
                 amount_sats: $amount_sats
             }) {
-                fee_estimate { original_value }
+                fee_estimate { original_value original_unit }
             }
         }
         """;

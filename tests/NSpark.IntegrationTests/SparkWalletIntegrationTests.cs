@@ -998,7 +998,12 @@ public class WithdrawalTests
             "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
             cts.Token);
 
-        Assert.That(fee.FeeSats, Is.GreaterThan(0));
+        // Guard against the alpha.5 unit-mismatch regression: a cooperative exit on mainnet
+        // always carries an L1 miner fee that's at least a couple hundred sats. If the quote
+        // comes back at 2 sats the conversion logic has misinterpreted MILLISATOSHI vs SATOSHI.
+        Assert.That(fee.FeeSats, Is.GreaterThan(100),
+            $"Withdrawal fee estimate {fee.FeeSats} sats looks suspiciously low — " +
+            "WithdrawalService.GetFeeQuoteAsync may be mishandling the CurrencyAmount unit.");
         TestContext.Out.WriteLine($"Withdrawal fee estimate: {fee.FeeSats} sats");
     }
 
