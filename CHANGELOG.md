@@ -10,6 +10,25 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-05-17
+
+### Added
+- `LightningService.GetLightningSendStatusAsync(SparkWallet, string, CancellationToken)`
+  extension method — query the SSP for the status of an outgoing Lightning
+  payment by its BOLT11 payment hash. Returns `null` when the SSP has no
+  record, an in-flight `LightningSendStatus` (no fee / no preimage) while the
+  HTLC is pending, and the final status with `FeeSats` + `Preimage` populated
+  once the payment flips to `SUCCEEDED`.
+- `NSpark.Models.LightningSendStatus` record carrying `PaymentHash`, `Status`,
+  `FeeSats`, and `Preimage`.
+
+### Fixed
+- CS1573 doc-comment warning on `GetLightningSendStatusAsync`: the lone
+  `<param>` tag triggered the "missing param tag" rule for the other
+  parameters. Folded the `paymentHash` description into the `<summary>` to
+  match the convention used by sibling extension methods in
+  `LightningService`.
+
 ## [0.1.0-alpha.2] - 2026-05-12
 
 ### Added

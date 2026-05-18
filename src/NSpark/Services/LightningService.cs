@@ -135,13 +135,13 @@ public static class LightningService
     }
 
     /// <summary>
-    /// Query the SSP for the status of an outgoing Lightning payment by its BOLT11 payment hash.
+    /// Query the SSP for the status of an outgoing Lightning payment by its BOLT11 payment hash
+    /// (lowercase hex SHA-256 of the HTLC preimage, 64 chars).
     /// Returns null if the SSP has no record (e.g., the hash was never paid through it).
     /// While the payment is in flight <see cref="LightningSendStatus.FeeSats"/> and
     /// <see cref="LightningSendStatus.Preimage"/> are null; both are populated once status flips
     /// to <c>SUCCEEDED</c>.
     /// </summary>
-    /// <param name="paymentHash">Lowercase hex SHA-256 of the HTLC preimage (64 chars).</param>
     public static async Task<LightningSendStatus?> GetLightningSendStatusAsync(
         this SparkWallet wallet,
         string paymentHash,
