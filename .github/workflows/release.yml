@@ -60,7 +60,7 @@ jobs:
           dotnet CycloneDX src/NSpark/NSpark.csproj --output ./artifacts/sbom --json
 
       - name: Generate SLSA build provenance attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ./artifacts/*.nupkg
 
