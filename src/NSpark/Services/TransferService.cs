@@ -4,7 +4,6 @@ using Google.Protobuf;
 using NSpark.Models;
 using NSpark.Proto;
 using NSpark.Signer;
-using uniffi.spark_frost;
 
 namespace NSpark.Services;
 
@@ -100,11 +99,11 @@ public static class TransferService
 
             // Construct refund tx trio (cpfp, direct, directFromCpfp) with decremented timelock
             // receivingPubkey = receiver's identity pubkey (server validates this)
-            var refundTrio = SparkFrostMethods.ConstructRefundTxTrio(
+            var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
                 cpfpNodeTx: nodeTxBytes,
                 directNodeTx: directNodeTx,
                 vout: 0,
-                receivingPubkey: receiverIdentityPublicKey,
+                receivingPublicKey: receiverIdentityPublicKey,
                 network: networkStr,
                 sequence: normalSeq,
                 directSequence: normalDirectSeq,
@@ -113,22 +112,22 @@ public static class TransferService
             // FROST sign cpfp refund
             cpfpRefundJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                 wallet.Signer, leaf.Id, verifyingKey,
-                refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash, cpfpCommitments, ct)
+                refundTrio.CpfpRefund.Tx, refundTrio.CpfpRefund.Sighash, cpfpCommitments, ct)
                 .ConfigureAwait(false));
 
             // FROST sign direct refund (if direct tx exists)
-            if (refundTrio.@directRefund != null)
+            if (refundTrio.DirectRefund != null)
             {
                 directRefundJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                     wallet.Signer, leaf.Id, verifyingKey,
-                    refundTrio.@directRefund.@tx, refundTrio.@directRefund.@sighash, directCommitments, ct)
+                    refundTrio.DirectRefund.Tx, refundTrio.DirectRefund.Sighash, directCommitments, ct)
                     .ConfigureAwait(false));
             }
 
             // FROST sign direct-from-cpfp refund
             directFromCpfpRefundJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                 wallet.Signer, leaf.Id, verifyingKey,
-                refundTrio.@directFromCpfpRefund.@tx, refundTrio.@directFromCpfpRefund.@sighash,
+                refundTrio.DirectFromCpfpRefund.Tx, refundTrio.DirectFromCpfpRefund.Sighash,
                 directFromCpfpCommitments, ct)
                 .ConfigureAwait(false));
         }

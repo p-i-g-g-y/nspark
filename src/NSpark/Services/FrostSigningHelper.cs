@@ -1,8 +1,6 @@
 using Google.Protobuf;
 using NSpark.Proto;
 using NSpark.Signer;
-using uniffi.spark_frost;
-using FrostSigningCommitment = uniffi.spark_frost.SigningCommitment;
 using ProtoSigningCommitment = NSpark.Proto.Common.SigningCommitment;
 using SignerSigningCommitment = NSpark.Signer.SigningCommitment;
 
@@ -11,11 +9,12 @@ namespace NSpark.Services;
 /// <summary>
 /// Helpers around <see cref="ISparkSigner"/>'s FROST surface: build <see cref="UserSignedTxSigningJob"/>
 /// instances for the SO-side protocol, convert between proto and signer commitment types,
-/// and combine self+SO partial signatures via the public aggregation primitive.
+/// and combine self+SO partial signatures via <see cref="FrostAggregator"/>.
 /// </summary>
 /// <remarks>
-/// This helper does NOT touch private key material. Every operation that needs a private
-/// scalar (FROST nonce generation, FROST partial signing) is delegated to <see cref="ISparkSigner"/>.
+/// This helper does NOT touch private key material and does NOT import <c>uniffi.spark_frost</c>.
+/// Every cryptographic operation flows through <see cref="ISparkSigner"/> (for private-material
+/// ops) or <see cref="FrostAggregator"/> (for public aggregation).
 /// </remarks>
 internal static class FrostSigningHelper
 {
@@ -45,7 +44,7 @@ internal static class FrostSigningHelper
     /// <summary>
     /// One-shot FROST signing with an adaptor public key (used in atomic-swap flows).
     /// Returns the signing job plus the self-commitment and sighash so a later
-    /// <see cref="AggregateAdaptorAsync"/> call can finalise the aggregated signature.
+    /// <see cref="AggregateFrostSignature"/> call can finalise the aggregated signature.
     /// </summary>
     internal static async Task<(UserSignedTxSigningJob Job, SignerSigningCommitment SelfCommitment, byte[] Sighash)>
         BuildSigningJobWithAdaptorAsync(
@@ -67,8 +66,10 @@ internal static class FrostSigningHelper
     }
 
     /// <summary>
-    /// Aggregate self + SO partial FROST signatures into a final aggregated signature.
-    /// This is a pure-public-key operation — no signer involvement required.
+    /// Aggregate self + SO partial FROST signatures into a final aggregated signature, given a
+    /// proto-shaped <see cref="SigningResult"/> from the SO response. Thin adapter over
+    /// <see cref="FrostAggregator.Aggregate"/> that extracts the proto fields into the public
+    /// aggregator surface.
     /// </summary>
     internal static byte[] AggregateFrostSignature(
         byte[] sighash,
@@ -79,28 +80,28 @@ internal static class FrostSigningHelper
         SigningResult signingResult,
         byte[]? adaptorPublicKey = null)
     {
-        var soCommitments = new Dictionary<string, FrostSigningCommitment>();
+        var soCommitments = new Dictionary<string, SignerSigningCommitment>(signingResult.SigningNonceCommitments.Count);
         foreach (var (soId, c) in signingResult.SigningNonceCommitments)
         {
-            soCommitments[soId] = new FrostSigningCommitment(c.Hiding.ToByteArray(), c.Binding.ToByteArray());
+            soCommitments[soId] = new SignerSigningCommitment(c.Hiding.ToByteArray(), c.Binding.ToByteArray());
         }
 
-        var soSignatures = new Dictionary<string, byte[]>();
+        var soSignatures = new Dictionary<string, byte[]>(signingResult.SignatureShares.Count);
         foreach (var (soId, sig) in signingResult.SignatureShares)
         {
             soSignatures[soId] = sig.ToByteArray();
         }
 
-        var soPublicKeys = new Dictionary<string, byte[]>();
+        var soPublicKeys = new Dictionary<string, byte[]>(signingResult.PublicKeys.Count);
         foreach (var (soId, pk) in signingResult.PublicKeys)
         {
             soPublicKeys[soId] = pk.ToByteArray();
         }
 
-        return SparkFrostMethods.AggregateFrost(
-            msg: sighash,
+        return FrostAggregator.Aggregate(
+            message: sighash,
             statechainCommitments: soCommitments,
-            selfCommitment: new FrostSigningCommitment(selfCommitment.Hiding, selfCommitment.Binding),
+            selfCommitment: selfCommitment,
             statechainSignatures: soSignatures,
             selfSignature: selfSignature,
             statechainPublicKeys: soPublicKeys,

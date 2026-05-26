@@ -4,7 +4,6 @@ using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
 using NSpark.Signer;
-using uniffi.spark_frost;
 
 namespace NSpark.Services;
 
@@ -111,11 +110,11 @@ public static class WithdrawalService
             var isZeroNode = IsZeroTimelockNode(cpfpNodeTx);
 
             // Build refund txs (single input)
-            var refundTrio = SparkFrostMethods.ConstructRefundTxTrio(
+            var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
                 cpfpNodeTx: cpfpNodeTx,
                 directNodeTx: directNodeTx,
                 vout: 0,
-                receivingPubkey: receiverPubKey,
+                receivingPublicKey: receiverPubKey,
                 network: networkStr,
                 sequence: cpfpSequence,
                 directSequence: directSequence,
@@ -125,16 +124,16 @@ public static class WithdrawalService
 
             // Add connector input to each refund tx
             var connectorInput = MakeConnectorInputBytes(connectorTxId, (uint)i);
-            var cpfpRefundWithConnector = AddInputToRawTx(refundTrio.@cpfpRefund.@tx, connectorInput);
+            var cpfpRefundWithConnector = AddInputToRawTx(refundTrio.CpfpRefund.Tx, connectorInput);
 
             byte[]? directRefundWithConnector = null;
-            if (refundTrio.@directRefund != null && !isZeroNode)
+            if (refundTrio.DirectRefund != null && !isZeroNode)
             {
-                directRefundWithConnector = AddInputToRawTx(refundTrio.@directRefund.@tx, connectorInput);
+                directRefundWithConnector = AddInputToRawTx(refundTrio.DirectRefund.Tx, connectorInput);
             }
 
             var directFromCpfpRefundWithConnector = AddInputToRawTx(
-                refundTrio.@directFromCpfpRefund.@tx, connectorInput);
+                refundTrio.DirectFromCpfpRefund.Tx, connectorInput);
 
             // Generate three FROST nonce commitments via the signer (phase 1). The actual
             // sighashes aren't known yet — the SO returns the final tx after combining the
@@ -233,7 +232,7 @@ public static class WithdrawalService
 
             // Sign CPFP refund (multi-input: node output + connector output)
             var cpfpNodeOutput = ParseTxOutput(leafData.CpfpNodeTx, 0);
-            var cpfpSighash = SparkFrostMethods.ComputeMultiInputSighashUniffi(
+            var cpfpSighash = SparkTxBuilder.ComputeMultiInputSighash(
                 tx: leafData.CpfpRefundTx,
                 inputIndex: 0,
                 prevOutScripts: [cpfpNodeOutput.Script, connectorPrevOut.Script],
@@ -257,7 +256,7 @@ public static class WithdrawalService
                 && result.DirectRefundTxSigningResult != null)
             {
                 var directNodeOutput = ParseTxOutput(leafData.DirectNodeTx, 0);
-                var directSighash = SparkFrostMethods.ComputeMultiInputSighashUniffi(
+                var directSighash = SparkTxBuilder.ComputeMultiInputSighash(
                     tx: leafData.DirectRefundTx,
                     inputIndex: 0,
                     prevOutScripts: [directNodeOutput.Script, connectorPrevOut.Script],
@@ -278,7 +277,7 @@ public static class WithdrawalService
             }
 
             // Sign directFromCpfp refund
-            var dcfpSighash = SparkFrostMethods.ComputeMultiInputSighashUniffi(
+            var dcfpSighash = SparkTxBuilder.ComputeMultiInputSighash(
                 tx: leafData.DirectFromCpfpRefundTx,
                 inputIndex: 0,
                 prevOutScripts: [cpfpNodeOutput.Script, connectorPrevOut.Script],

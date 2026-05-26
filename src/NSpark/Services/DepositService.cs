@@ -5,7 +5,6 @@ using NBitcoin;
 using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
-using uniffi.spark_frost;
 using Network = NSpark.Proto.Network;
 
 namespace NSpark.Services;
@@ -104,7 +103,7 @@ public static class DepositService
         var signingPubKey = await wallet.Signer.GetLeafPublicKeyAsync(leafId, ct).ConfigureAwait(false);
 
         // Step 4: Create root node tx pair (CPFP + direct)
-        var rootNodeTx = SparkFrostMethods.ConstructNodeTxPair(
+        var rootNodeTx = SparkTxBuilder.BuildNodeTxPair(
             parentTx: rawTx,
             vout: vout,
             address: depositAddress,
@@ -113,11 +112,11 @@ public static class DepositService
             feeSats: DefaultFeeSats);
 
         // Step 5: Create refund tx trio
-        var refundTrio = SparkFrostMethods.ConstructRefundTxTrio(
-            cpfpNodeTx: rootNodeTx.@cpfp.@tx,
+        var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
+            cpfpNodeTx: rootNodeTx.Cpfp.Tx,
             directNodeTx: null,
             vout: 0,
-            receivingPubkey: signingPubKey,
+            receivingPublicKey: signingPubKey,
             network: networkStr,
             sequence: InitialRefundSequence,
             directSequence: InitialRefundSequence + DirectTimelockOffset,
@@ -133,17 +132,17 @@ public static class DepositService
         // Step 7: Build signing jobs (FROST signing happens inside the signer)
         var rootJob = await FrostSigningHelper.BuildSigningJobAsync(
             wallet.Signer, leafId, verifyingKey,
-            rootNodeTx.@cpfp.@tx, rootNodeTx.@cpfp.@sighash,
+            rootNodeTx.Cpfp.Tx, rootNodeTx.Cpfp.Sighash,
             allCommitments[0].SigningNonceCommitments, ct).ConfigureAwait(false);
 
         var refundJob = await FrostSigningHelper.BuildSigningJobAsync(
             wallet.Signer, leafId, verifyingKey,
-            refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
+            refundTrio.CpfpRefund.Tx, refundTrio.CpfpRefund.Sighash,
             allCommitments[1].SigningNonceCommitments, ct).ConfigureAwait(false);
 
         var directFromCpfpRefundJob = await FrostSigningHelper.BuildSigningJobAsync(
             wallet.Signer, leafId, verifyingKey,
-            refundTrio.@directFromCpfpRefund.@tx, refundTrio.@directFromCpfpRefund.@sighash,
+            refundTrio.DirectFromCpfpRefund.Tx, refundTrio.DirectFromCpfpRefund.Sighash,
             allCommitments[2].SigningNonceCommitments, ct).ConfigureAwait(false);
 
         // Step 8: Build UTXO proto (txid in internal byte order = reversed)
@@ -420,7 +419,7 @@ public static class DepositService
         var spendTx = ConstructSpendTx(depositTransactionId, outputIndex, destScript, creditAmountSats);
 
         // Step 4: Compute sighash
-        var sighash = SparkFrostMethods.ComputeMultiInputSighashUniffi(
+        var sighash = SparkTxBuilder.ComputeMultiInputSighash(
             tx: spendTx, inputIndex: 0,
             prevOutScripts: [script],
             prevOutValues: [totalAmount]);

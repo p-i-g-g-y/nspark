@@ -5,7 +5,6 @@ using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
 using NSpark.Signer;
-using uniffi.spark_frost;
 
 namespace NSpark.Services;
 
@@ -357,7 +356,7 @@ public static class LightningService
             var htlcDirectSeq = bit30 | (nextTimelock + DirectHtlcTimelockOffset);
 
             // CPFP HTLC refund tx (applyFee: false)
-            var cpfpHtlc = SparkFrostMethods.ConstructHtlcTransaction(
+            var cpfpHtlc = SparkTxBuilder.BuildHtlcTransaction(
                 nodeTx: nodeTxBytes, vout: 0, sequence: htlcSeq,
                 paymentHash: paymentHash, hashlockPubkey: sspPubKey,
                 seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
@@ -365,14 +364,14 @@ public static class LightningService
 
             htlcCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                 wallet.Signer, node.Id, verifyingKey,
-                cpfpHtlc.@tx, cpfpHtlc.@sighash,
+                cpfpHtlc.Tx, cpfpHtlc.Sighash,
                 htlcCommitments[i].SigningNonceCommitments, ct)
                 .ConfigureAwait(false));
 
             // Direct HTLC refund tx (if directTx exists)
             if (node.DirectTx.Length > 0)
             {
-                var directHtlc = SparkFrostMethods.ConstructHtlcTransaction(
+                var directHtlc = SparkTxBuilder.BuildHtlcTransaction(
                     nodeTx: node.DirectTx.ToByteArray(), vout: 0, sequence: htlcDirectSeq,
                     paymentHash: paymentHash, hashlockPubkey: sspPubKey,
                     seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
@@ -380,13 +379,13 @@ public static class LightningService
 
                 htlcDirectJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                     wallet.Signer, node.Id, verifyingKey,
-                    directHtlc.@tx, directHtlc.@sighash,
+                    directHtlc.Tx, directHtlc.Sighash,
                     htlcCommitments[i + selectedLeaves.Count].SigningNonceCommitments, ct)
                     .ConfigureAwait(false));
             }
 
             // DirectFromCpfp HTLC refund tx (applyFee: true)
-            var directFromCpfpHtlc = SparkFrostMethods.ConstructHtlcTransaction(
+            var directFromCpfpHtlc = SparkTxBuilder.BuildHtlcTransaction(
                 nodeTx: nodeTxBytes, vout: 0, sequence: htlcDirectSeq,
                 paymentHash: paymentHash, hashlockPubkey: sspPubKey,
                 seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
@@ -394,7 +393,7 @@ public static class LightningService
 
             htlcDirectFromCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                 wallet.Signer, node.Id, verifyingKey,
-                directFromCpfpHtlc.@tx, directFromCpfpHtlc.@sighash,
+                directFromCpfpHtlc.Tx, directFromCpfpHtlc.Sighash,
                 htlcCommitments[i + 2 * selectedLeaves.Count].SigningNonceCommitments, ct)
                 .ConfigureAwait(false));
         }
@@ -494,11 +493,11 @@ public static class LightningService
             var normalSeq = bit30 | nextTimelock;
             var normalDirectSeq = bit30 | (nextTimelock + DirectTimelockOffset);
 
-            var refundTrio = SparkFrostMethods.ConstructRefundTxTrio(
+            var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
                 cpfpNodeTx: nodeTxBytes,
                 directNodeTx: directNodeTx,
                 vout: 0,
-                receivingPubkey: sspPubKey,
+                receivingPublicKey: sspPubKey,
                 network: networkStr,
                 sequence: normalSeq,
                 directSequence: normalDirectSeq,
@@ -509,7 +508,7 @@ public static class LightningService
             // Only cpfp goes into transfer.leavesToSend (direct/directFromCpfp omitted per ref SDK)
             swapCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
                 wallet.Signer, node.Id, verifyingKey,
-                refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
+                refundTrio.CpfpRefund.Tx, refundTrio.CpfpRefund.Sighash,
                 swapCommitments[i].SigningNonceCommitments, ct)
                 .ConfigureAwait(false));
         }

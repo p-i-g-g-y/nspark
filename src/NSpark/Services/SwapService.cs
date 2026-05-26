@@ -3,7 +3,6 @@ using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
 using NSpark.Signer;
-using uniffi.spark_frost;
 
 namespace NSpark.Services;
 
@@ -202,11 +201,11 @@ public static class SwapService
 
             var nodeTxBytes = node.NodeTx.ToByteArray();
             var directNodeTx = node.DirectTx.Length > 0 ? node.DirectTx.ToByteArray() : null;
-            var refundTrio = SparkFrostMethods.ConstructRefundTxTrio(
+            var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
                 cpfpNodeTx: nodeTxBytes,
                 directNodeTx: directNodeTx,
                 vout: 0,
-                receivingPubkey: receiverPubKey,
+                receivingPublicKey: receiverPubKey,
                 network: networkStr,
                 sequence: cpfpSequence,
                 directSequence: directSequence,
@@ -214,7 +213,7 @@ public static class SwapService
 
             var (job, selfCommitment, sighash) = await FrostSigningHelper.BuildSigningJobWithAdaptorAsync(
                 wallet.Signer, leaf.Id, verifyingKey,
-                refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
+                refundTrio.CpfpRefund.Tx, refundTrio.CpfpRefund.Sighash,
                 cpfpCommitments, adaptorPubKey, ct)
                 .ConfigureAwait(false);
             cpfpRefundJobs.Add(job);
