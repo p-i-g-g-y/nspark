@@ -4,6 +4,7 @@ using Google.Protobuf;
 using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
+using NSpark.Signer;
 using uniffi.spark_frost;
 
 namespace NSpark.Services;
@@ -32,17 +33,25 @@ public static class LightningService
             throw new ArgumentException("descriptionHash must be 32 bytes (SHA-256).", nameof(descriptionHash));
         }
 
-        // Step 1: Generate deterministic preimage shares via the signer.
-        // transferId seeds the signer's HMAC-based preimage derivation; the payment_hash
-        // is the public anchor returned to the wallet.
+        // Step 1: Build per-SO encrypted preimage shares via the signer. The preimage
+        // is derived deterministically from transferId inside the signer and never
+        // crosses into the wallet's address space — the wallet receives only the
+        // public payment_hash and per-SO encrypted SecretShare proto blobs.
         var transferId = Guid.NewGuid().ToString();
         var soConfigs = wallet.Client.Options.SigningOperators;
         var numOperators = (uint)soConfigs.Length;
         var threshold = (uint)((numOperators + 2) / 2); // same as JS SDK
 
-        var preimageResult = await wallet.Signer.CreatePreimageSharesAsync(
-            transferId, threshold, numOperators, ct).ConfigureAwait(false);
-        var paymentHash = preimageResult.PaymentHash;
+        var preimageSoTargets = soConfigs
+            .Select((cfg, i) => new SoTarget(
+                cfg.Identifier,
+                (uint)(i + 1),
+                Convert.FromHexString(cfg.IdentityPublicKeyHex)))
+            .ToList();
+
+        var preimageBundle = await wallet.Signer.BuildEncryptedPreimageSharesAsync(
+            transferId, preimageSoTargets, threshold, ct).ConfigureAwait(false);
+        var paymentHash = preimageBundle.PaymentHash;
         var paymentHashHex = Convert.ToHexString(paymentHash).ToLowerInvariant();
 
         // Step 2: Request invoice from SSP via GraphQL
@@ -86,26 +95,11 @@ public static class LightningService
             UserIdentityPublicKey = ByteString.CopyFrom(receiverIdentityPublicKey ?? wallet.IdentityPublicKey),
         };
 
-        // Match shares to operators by index (0-based), encrypt to each SO's identity key.
-        // ECIES encryption uses the SO's *public* key — no signer involvement needed.
-        for (int i = 0; i < soConfigs.Length; i++)
+        // The signer already ECIES-encrypted each SO's SecretShare proto to that SO's
+        // identity public key — the wallet just plugs the blobs into the request map.
+        foreach (var (soId, encrypted) in preimageBundle.EncryptedShareBySoId)
         {
-            var soConfig = soConfigs[i];
-            var share = preimageResult.Shares[i];
-
-            var secretShare = new SecretShare
-            {
-                SecretShare_ = ByteString.CopyFrom(share.Share),
-            };
-            foreach (var proof in share.Proofs)
-            {
-                secretShare.Proofs.Add(ByteString.CopyFrom(proof));
-            }
-
-            var shareBytes = secretShare.ToByteArray();
-            var identityPubKey = Convert.FromHexString(soConfig.IdentityPublicKeyHex);
-            var encrypted = SparkFrostMethods.EncryptEcies(shareBytes, identityPubKey);
-            storeRequest.EncryptedPreimageShares.Add(soConfig.Identifier, ByteString.CopyFrom(encrypted));
+            storeRequest.EncryptedPreimageShares.Add(soId, ByteString.CopyFrom(encrypted));
         }
 
         await coordinatorClient.store_preimage_share_v2Async(
@@ -316,72 +310,20 @@ public static class LightningService
 
         // ── prepareTransferForLightning: key tweaks + HTLC refund txs ──
 
-        // Step 3: Build key tweaks for each leaf
-        var perSoTweaks = new Dictionary<string, SendLeafKeyTweaks>();
-        foreach (var (soId, _) in soOperators)
-        {
-            perSoTweaks[soId] = new SendLeafKeyTweaks();
-        }
-
+        // Step 3-4: Build encrypted per-SO tweak packages via the signer. All share material
+        // stays inside the signer's trust boundary; the wallet only sees the encrypted blobs.
         var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
+        var soTargets = FrostSigningHelper.BuildSoTargets(soOperators, wallet.Client.Options.SigningOperators);
+        var leafDescriptors = selectedLeaves
+            .Select(l => new SendTweakLeafDescriptor(l.Id, sspPubKey))
+            .ToList();
+        var encryptedBatch = await wallet.Signer.BuildEncryptedSendTweaksAsync(
+            leafDescriptors, soTargets, transferId, threshold, ct).ConfigureAwait(false);
 
-        for (int i = 0; i < selectedLeaves.Count; i++)
+        var keyTweakPackage = new Dictionary<string, ByteString>(encryptedBatch.EncryptedPackageBySoId.Count);
+        foreach (var (soId, blob) in encryptedBatch.EncryptedPackageBySoId)
         {
-            var leaf = selectedLeaves[i];
-
-            // Compute leaf tweak shares via the signer — the leaf signing key never leaves the signer.
-            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
-                leaf.Id, sspPubKey, threshold, soCount, ct).ConfigureAwait(false);
-            var secretCipher = tweak.SecretCipher;
-
-            var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
-            sigPayload = [.. sigPayload, .. secretCipher];
-            // Compact signature (64 bytes) for leaf key tweak, matching JS SDK compact=true
-            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(
-                SHA256.HashData(sigPayload), ct).ConfigureAwait(false);
-
-            var pubkeySharesTweak = new Dictionary<string, ByteString>();
-            foreach (var (soId2, soInfo2) in soOperators)
-            {
-                var matchedShare = tweak.Shares.First(s => s.Index == soInfo2.Index + 1);
-                pubkeySharesTweak[soId2] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
-            }
-
-            foreach (var (soId, soInfo) in soOperators)
-            {
-                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
-                var leafTweak = new SendLeafKeyTweak
-                {
-                    LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
-                    SecretCipher = ByteString.CopyFrom(secretCipher),
-                    Signature = ByteString.CopyFrom(tweakSig),
-                };
-                foreach (var proof in share.Proofs)
-                {
-                    leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
-                }
-
-                foreach (var (k, v) in pubkeySharesTweak)
-                {
-                    leafTweak.PubkeySharesTweak.Add(k, v);
-                }
-
-                perSoTweaks[soId].LeavesToSend.Add(leafTweak);
-            }
-        }
-
-        // Step 4: Encrypt per-SO key tweak packages (to config identity keys, NOT gRPC response keys)
-        var soConfigs = wallet.Client.Options.SigningOperators;
-        var keyTweakPackage = new Dictionary<string, ByteString>();
-        foreach (var (soId, _) in soOperators)
-        {
-            var tweaksBytes = perSoTweaks[soId].ToByteArray();
-            var soConfig = soConfigs.First(c => c.Identifier == soId);
-            var soIdentityPubKey = Convert.FromHexString(soConfig.IdentityPublicKeyHex);
-            var encrypted = SparkFrostMethods.EncryptEcies(tweaksBytes, soIdentityPubKey);
-            keyTweakPackage[soId] = ByteString.CopyFrom(encrypted);
+            keyTweakPackage[soId] = ByteString.CopyFrom(blob);
         }
 
         // Step 5: Get signing commitments for HTLC refund txs (Count=3: cpfp, direct, directFromCpfp)

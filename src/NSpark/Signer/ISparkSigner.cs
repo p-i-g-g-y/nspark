@@ -123,34 +123,47 @@ public interface ISparkSigner
         CancellationToken ct = default);
 
     /// <summary>
-    /// Compute leaf transfer tweak shares for the send side. The signer internally
-    /// derives the leaf's current signing key, generates a new intermediate key,
-    /// computes <c>(oldKey - newKey) mod n</c>, splits the tweak via VSS, and ECIES-
-    /// encrypts the new intermediate key to <paramref name="receiverPublicKey"/>.
+    /// Build a complete send-side tweak batch and return per-SO ECIES-encrypted
+    /// <c>SendLeafKeyTweaks</c> proto blobs ready for the wire. For each leaf the signer
+    /// derives the leaf signing key, generates a fresh intermediate key, computes the
+    /// tweak <c>(oldKey - newKey) mod n</c>, VSS-splits the tweak, ECIES-encrypts the
+    /// intermediate key to the receiver, signs the per-leaf tweak payload, and folds
+    /// every leaf's contribution into one <c>SendLeafKeyTweaks</c> proto per SO before
+    /// ECIES-encrypting it to that SO's identity public key.
     /// </summary>
-    /// <param name="leafId">The leaf being transferred.</param>
-    /// <param name="receiverPublicKey">33-byte compressed public key the new intermediate key is encrypted to.</param>
-    /// <param name="threshold">FROST threshold (number of SO shares required to recover the tweak).</param>
-    /// <param name="numShares">Total number of SO shares to produce.</param>
+    /// <remarks>
+    /// No plaintext share material, no intermediate-key plaintext, and no tweak signature
+    /// payload leaves the signer — the wallet only sees the final encrypted blobs to plug
+    /// into the <c>key_tweak_package</c> map.
+    /// </remarks>
+    /// <param name="leaves">One descriptor per leaf in the batch.</param>
+    /// <param name="soTargets">SO targets the encrypted packages will be addressed to (one entry per SO).</param>
+    /// <param name="transferId">Transfer ID — bound into the per-leaf tweak signature payload.</param>
+    /// <param name="threshold">FROST threshold (minimum SO shares required to reconstruct the tweak).</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<LeafTweakSharesResult> ComputeLeafTweakSharesAsync(
-        string leafId,
-        byte[] receiverPublicKey,
+    Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
+        IReadOnlyList<SendTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
+        string transferId,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default);
 
     /// <summary>
-    /// Compute claim-side tweak shares. The signer ECIES-decrypts the sender's
-    /// <paramref name="senderSecretCipher"/> (which contains the sender's intermediate
-    /// signing key), derives the receiver's new per-leaf signing key for <paramref name="leafId"/>,
-    /// computes <c>(senderIntermediate - newLeafKey) mod n</c>, and splits the tweak via VSS.
+    /// Build a complete claim-side tweak batch. The signer ECIES-decrypts each leaf's
+    /// <see cref="ClaimTweakLeafDescriptor.SenderSecretCipher"/> to obtain the sender's
+    /// intermediate signing key, derives the receiver's new per-leaf key, computes the
+    /// tweak, VSS-splits it, and folds everything into one <c>ClaimLeafKeyTweaks</c>
+    /// proto per SO before ECIES-encrypting it to that SO.
     /// </summary>
-    Task<ClaimTweakSharesResult> ComputeClaimTweakSharesAsync(
-        string leafId,
-        byte[] senderSecretCipher,
+    /// <remarks>
+    /// The per-leaf new public key is returned so the wallet can use it as the receiving
+    /// pubkey when constructing claim refund txs — no other plaintext key material leaves
+    /// the signer.
+    /// </remarks>
+    Task<EncryptedClaimTweakBatch> BuildEncryptedClaimTweaksAsync(
+        IReadOnlyList<ClaimTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default);
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -202,19 +215,23 @@ public interface ISparkSigner
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Deterministically generate a Lightning HTLC preimage from <paramref name="transferId"/>
-    /// and VSS-split it into per-SO shares with proofs. Only the SHA-256 payment hash and
-    /// the shares cross the signer boundary; the preimage itself stays inside.
+    /// Build a per-SO ECIES-encrypted Lightning preimage share bundle. The signer
+    /// deterministically derives the preimage from <paramref name="transferId"/>,
+    /// VSS-splits it into one share per SO, wraps each share with its proofs in a
+    /// <c>SecretShare</c> proto, and ECIES-encrypts that proto to the matching SO's
+    /// identity public key. Only the payment hash and the per-SO encrypted blobs cross
+    /// the signer boundary; the preimage and the raw share scalars stay inside.
     /// </summary>
     /// <remarks>
-    /// Determinism is load-bearing: if the wallet crashes between issuing the invoice and
-    /// storing the shares, calling this method again with the same <paramref name="transferId"/>
-    /// MUST produce the same payment hash so recovery is possible.
+    /// Determinism is load-bearing: if the wallet crashes between issuing the invoice
+    /// and storing the shares, calling this method again with the same
+    /// <paramref name="transferId"/> MUST produce the same payment hash so recovery
+    /// is possible.
     /// </remarks>
-    Task<PreimageShareSplitResult> CreatePreimageSharesAsync(
+    Task<EncryptedPreimageShareBundle> BuildEncryptedPreimageSharesAsync(
         string transferId,
+        IReadOnlyList<SoTarget> soTargets,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default);
 
     // ─────────────────────────────────────────────────────────────────────────

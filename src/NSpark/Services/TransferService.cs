@@ -3,6 +3,7 @@ using System.Text;
 using Google.Protobuf;
 using NSpark.Models;
 using NSpark.Proto;
+using NSpark.Signer;
 using uniffi.spark_frost;
 
 namespace NSpark.Services;
@@ -50,19 +51,28 @@ public static class TransferService
         // Commitments are interleaved: [leaf0_r0, leaf1_r0, ..., leaf0_r1, leaf1_r1, ...]
         var allCommitments = commitmentsResponse.SigningCommitments.ToList();
 
-        // Step 4: For each leaf — derive key, VSS split tweak, construct + sign refund txs
+        // Step 4: Build encrypted per-SO tweak packages via the signer — no plaintext share
+        // material ever crosses the wallet boundary.
+        transferId ??= Guid.NewGuid().ToString();
+        var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
+
+        var soTargets = FrostSigningHelper.BuildSoTargets(soOperators, wallet.Client.Options.SigningOperators);
+        var leafDescriptors = selectedLeaves
+            .Select(l => new SendTweakLeafDescriptor(l.Id, receiverIdentityPublicKey))
+            .ToList();
+        var encryptedBatch = await wallet.Signer.BuildEncryptedSendTweaksAsync(
+            leafDescriptors, soTargets, transferId, threshold, ct).ConfigureAwait(false);
+
+        var keyTweakPackage = new Dictionary<string, ByteString>(encryptedBatch.EncryptedPackageBySoId.Count);
+        foreach (var (soId, blob) in encryptedBatch.EncryptedPackageBySoId)
+        {
+            keyTweakPackage[soId] = ByteString.CopyFrom(blob);
+        }
+
+        // Step 5: Sign FROST refund txs (one round per leaf × three refund types)
         var cpfpRefundJobs = new List<UserSignedTxSigningJob>();
         var directRefundJobs = new List<UserSignedTxSigningJob>();
         var directFromCpfpRefundJobs = new List<UserSignedTxSigningJob>();
-        var perSoTweaks = new Dictionary<string, SendLeafKeyTweaks>();
-        foreach (var (soId, _) in soOperators)
-        {
-            perSoTweaks[soId] = new SendLeafKeyTweaks();
-        }
-
-        transferId ??= Guid.NewGuid().ToString();
-
-        var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
 
         for (int i = 0; i < selectedLeaves.Count; i++)
         {
@@ -87,11 +97,6 @@ public static class TransferService
             var cpfpCommitments = allCommitments[i].SigningNonceCommitments;
             var directCommitments = allCommitments[i + selectedLeaves.Count].SigningNonceCommitments;
             var directFromCpfpCommitments = allCommitments[i + 2 * selectedLeaves.Count].SigningNonceCommitments;
-
-            // Compute leaf tweak shares via the signer — the leaf signing key never leaves the signer.
-            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
-                leaf.Id, receiverIdentityPublicKey, threshold, soCount, ct).ConfigureAwait(false);
-            var secretCipher = tweak.SecretCipher;
 
             // Construct refund tx trio (cpfp, direct, directFromCpfp) with decremented timelock
             // receivingPubkey = receiver's identity pubkey (server validates this)
@@ -126,59 +131,6 @@ public static class TransferService
                 refundTrio.@directFromCpfpRefund.@tx, refundTrio.@directFromCpfpRefund.@sighash,
                 directFromCpfpCommitments, ct)
                 .ConfigureAwait(false));
-
-            // Compact signature: SHA256(leaf_id || transfer_id || secret_cipher)
-            var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
-            sigPayload = [.. sigPayload, .. secretCipher];
-            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(SHA256.HashData(sigPayload), ct)
-                .ConfigureAwait(false);
-
-            // Build pubkey shares tweak map: SO_id → pubkey(that SO's VSS share)
-            // Match shares to operators by index: operator.Index=N → share.index=N+1
-            var pubkeySharesTweak = new Dictionary<string, ByteString>();
-            foreach (var (soId2, soInfo2) in soOperators)
-            {
-                var matchedShare = tweak.Shares.First(s => s.Index == soInfo2.Index + 1);
-                pubkeySharesTweak[soId2] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
-            }
-
-            // Build per-SO key tweak entries
-            foreach (var (soId, soInfo) in soOperators)
-            {
-                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
-                var leafTweak = new SendLeafKeyTweak
-                {
-                    LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
-                    SecretCipher = ByteString.CopyFrom(secretCipher),
-                    Signature = ByteString.CopyFrom(tweakSig),
-                };
-                foreach (var proof in share.Proofs)
-                {
-                    leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
-                }
-
-                // Same pubkey shares tweak map for every SO
-                foreach (var (k, v) in pubkeySharesTweak)
-                {
-                    leafTweak.PubkeySharesTweak.Add(k, v);
-                }
-
-                perSoTweaks[soId].LeavesToSend.Add(leafTweak);
-            }
-        }
-
-        // Step 5: ECIES encrypt per-SO key tweak packages (to config identity keys, NOT gRPC response keys)
-        var soConfigs = wallet.Client.Options.SigningOperators;
-        var keyTweakPackage = new Dictionary<string, ByteString>();
-        foreach (var (soId, _) in soOperators)
-        {
-            var tweaksBytes = perSoTweaks[soId].ToByteArray();
-            var soConfig = soConfigs.First(c => c.Identifier == soId);
-            var soIdentityPubKey = Convert.FromHexString(soConfig.IdentityPublicKeyHex);
-            var encrypted = SparkFrostMethods.EncryptEcies(tweaksBytes, soIdentityPubKey);
-            keyTweakPackage[soId] = ByteString.CopyFrom(encrypted);
         }
 
         // Step 6: Sign the key tweak package (BIP-340 tagged hash with domain "spark/transfer/signing payload")

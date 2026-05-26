@@ -1,8 +1,12 @@
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Text;
+using Google.Protobuf;
 using NBitcoin;
+using NSpark.Proto;
 using uniffi.spark_frost;
 using FrostSigningCommitment = uniffi.spark_frost.SigningCommitment;
+using ProtoSecretShare = NSpark.Proto.SecretShare;
 
 namespace NSpark.Signer;
 
@@ -190,28 +194,112 @@ public sealed class SparkSigner : ISparkSigner
     }
 
     /// <inheritdoc/>
-    public Task<LeafTweakSharesResult> ComputeLeafTweakSharesAsync(
-        string leafId,
-        byte[] receiverPublicKey,
+    public Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
+        IReadOnlyList<SendTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
+        string transferId,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default)
     {
-        var oldKey = _keys.DeriveLeafKey(leafId).PrivateKey.ToBytes();
+        ArgumentNullException.ThrowIfNull(leaves);
+        ArgumentNullException.ThrowIfNull(soTargets);
+        ArgumentException.ThrowIfNullOrEmpty(transferId);
+
+        // perLeafPerSo[leafIndex] holds a fully-built SendLeafKeyTweak for each SO, with that
+        // SO's share already plugged in. We build one collection per leaf first, then transpose
+        // into per-SO packages and ECIES-encrypt at the end.
+        var perSoPackages = new Dictionary<string, SendLeafKeyTweaks>(soTargets.Count);
+        foreach (var so in soTargets)
+        {
+            perSoPackages[so.SoId] = new SendLeafKeyTweaks();
+        }
+
+        var identityPriv = _keys.IdentityKey.PrivateKey.ToBytes();
+        try
+        {
+            foreach (var leaf in leaves)
+            {
+                BuildOneSendLeaf(leaf, soTargets, transferId, threshold, identityPriv, perSoPackages);
+            }
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(identityPriv);
+        }
+
+        // ECIES-encrypt one package per SO to its identity public key.
+        var encryptedBySo = new Dictionary<string, byte[]>(soTargets.Count);
+        foreach (var so in soTargets)
+        {
+            var packageBytes = perSoPackages[so.SoId].ToByteArray();
+            encryptedBySo[so.SoId] = SparkFrostMethods.EncryptEcies(packageBytes, so.IdentityPublicKey);
+        }
+
+        return Task.FromResult(new EncryptedSendTweakBatch(encryptedBySo));
+    }
+
+    private void BuildOneSendLeaf(
+        SendTweakLeafDescriptor leaf,
+        IReadOnlyList<SoTarget> soTargets,
+        string transferId,
+        uint threshold,
+        byte[] identityPriv,
+        Dictionary<string, SendLeafKeyTweaks> perSoPackages)
+    {
+        var oldKey = _keys.DeriveLeafKey(leaf.LeafId).PrivateKey.ToBytes();
         var newKey = SparkFrostMethods.RandomSecretKeyBytes();
         try
         {
             var tweak = SubtractScalarsModN(oldKey, newKey);
             try
             {
-                var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(tweak, threshold, numShares);
-                var secretCipher = SparkFrostMethods.EncryptEcies(newKey, receiverPublicKey);
-                var newPub = SparkFrostMethods.GetPublicKeyBytes(newKey, compressed: true);
+                var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(
+                    tweak, threshold, (uint)soTargets.Count);
+                var secretCipher = SparkFrostMethods.EncryptEcies(newKey, leaf.ReceiverPublicKey);
 
-                return Task.FromResult(new LeafTweakSharesResult(
-                    SecretCipher: secretCipher,
-                    NewPublicKey: newPub,
-                    Shares: ConvertShares(shares)));
+                // Tweak signature: ECDSA compact over SHA256(leafId || transferId || secretCipher).
+                // The wallet used to compute this; now it lives inside the signer's trust boundary.
+                var sigPayload = new List<byte>();
+                sigPayload.AddRange(Encoding.UTF8.GetBytes(leaf.LeafId + transferId));
+                sigPayload.AddRange(secretCipher);
+                var hashUint = new uint256(SHA256.HashData(sigPayload.ToArray()));
+                var tweakSig = _keys.IdentityKey.PrivateKey.Sign(hashUint).ToCompact();
+
+                // pubkey of each share (one per SO) for the pubkey_shares_tweak map.
+                var pubkeySharesTweak = new Dictionary<string, ByteString>(soTargets.Count);
+                foreach (var so in soTargets)
+                {
+                    var matchedShare = shares.First(s => s.@index == so.ShareIndex);
+                    pubkeySharesTweak[so.SoId] = ByteString.CopyFrom(
+                        SparkFrostMethods.GetPublicKeyBytes(matchedShare.@share, compressed: true));
+                }
+
+                // Plug each SO's share into its package.
+                foreach (var so in soTargets)
+                {
+                    var share = shares.First(s => s.@index == so.ShareIndex);
+                    var leafTweak = new SendLeafKeyTweak
+                    {
+                        LeafId = leaf.LeafId,
+                        SecretShareTweak = new ProtoSecretShare
+                        {
+                            SecretShare_ = ByteString.CopyFrom(share.@share),
+                        },
+                        SecretCipher = ByteString.CopyFrom(secretCipher),
+                        Signature = ByteString.CopyFrom(tweakSig),
+                    };
+                    foreach (var proof in share.@proofs)
+                    {
+                        leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
+                    }
+
+                    foreach (var (k, v) in pubkeySharesTweak)
+                    {
+                        leafTweak.PubkeySharesTweak.Add(k, v);
+                    }
+
+                    perSoPackages[so.SoId].LeavesToSend.Add(leafTweak);
+                }
             }
             finally
             {
@@ -226,29 +314,99 @@ public sealed class SparkSigner : ISparkSigner
     }
 
     /// <inheritdoc/>
-    public Task<ClaimTweakSharesResult> ComputeClaimTweakSharesAsync(
-        string leafId,
-        byte[] senderSecretCipher,
+    public Task<EncryptedClaimTweakBatch> BuildEncryptedClaimTweaksAsync(
+        IReadOnlyList<ClaimTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(leaves);
+        ArgumentNullException.ThrowIfNull(soTargets);
+
+        var perSoPackages = new Dictionary<string, ClaimLeafKeyTweaks>(soTargets.Count);
+        foreach (var so in soTargets)
+        {
+            perSoPackages[so.SoId] = new ClaimLeafKeyTweaks();
+        }
+
+        var newPubKeyByLeaf = new Dictionary<string, byte[]>(leaves.Count);
         var identityPriv = _keys.IdentityKey.PrivateKey.ToBytes();
+        try
+        {
+            foreach (var leaf in leaves)
+            {
+                var newPubKey = BuildOneClaimLeaf(leaf, soTargets, threshold, identityPriv, perSoPackages);
+                newPubKeyByLeaf[leaf.LeafId] = newPubKey;
+            }
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(identityPriv);
+        }
+
+        var encryptedBySo = new Dictionary<string, byte[]>(soTargets.Count);
+        foreach (var so in soTargets)
+        {
+            var packageBytes = perSoPackages[so.SoId].ToByteArray();
+            encryptedBySo[so.SoId] = SparkFrostMethods.EncryptEcies(packageBytes, so.IdentityPublicKey);
+        }
+
+        return Task.FromResult(new EncryptedClaimTweakBatch(newPubKeyByLeaf, encryptedBySo));
+    }
+
+    private byte[] BuildOneClaimLeaf(
+        ClaimTweakLeafDescriptor leaf,
+        IReadOnlyList<SoTarget> soTargets,
+        uint threshold,
+        byte[] identityPriv,
+        Dictionary<string, ClaimLeafKeyTweaks> perSoPackages)
+    {
         byte[]? oldKey = null;
         byte[]? newKey = null;
         try
         {
-            oldKey = SparkFrostMethods.DecryptEcies(senderSecretCipher, identityPriv);
-            newKey = _keys.DeriveLeafKey(leafId).PrivateKey.ToBytes();
+            oldKey = SparkFrostMethods.DecryptEcies(leaf.SenderSecretCipher, identityPriv);
+            newKey = _keys.DeriveLeafKey(leaf.LeafId).PrivateKey.ToBytes();
+            var newPubKey = SparkFrostMethods.GetPublicKeyBytes(newKey, compressed: true);
             var tweak = SubtractScalarsModN(oldKey, newKey);
             try
             {
-                var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(tweak, threshold, numShares);
-                var newPub = SparkFrostMethods.GetPublicKeyBytes(newKey, compressed: true);
+                var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(
+                    tweak, threshold, (uint)soTargets.Count);
 
-                return Task.FromResult(new ClaimTweakSharesResult(
-                    NewPublicKey: newPub,
-                    Shares: ConvertShares(shares)));
+                var pubkeySharesTweak = new Dictionary<string, ByteString>(soTargets.Count);
+                foreach (var so in soTargets)
+                {
+                    var matchedShare = shares.First(s => s.@index == so.ShareIndex);
+                    pubkeySharesTweak[so.SoId] = ByteString.CopyFrom(
+                        SparkFrostMethods.GetPublicKeyBytes(matchedShare.@share, compressed: true));
+                }
+
+                foreach (var so in soTargets)
+                {
+                    var share = shares.First(s => s.@index == so.ShareIndex);
+                    var leafTweak = new ClaimLeafKeyTweak
+                    {
+                        LeafId = leaf.LeafId,
+                        SecretShareTweak = new ProtoSecretShare
+                        {
+                            SecretShare_ = ByteString.CopyFrom(share.@share),
+                        },
+                    };
+                    foreach (var proof in share.@proofs)
+                    {
+                        leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
+                    }
+
+                    foreach (var (k, v) in pubkeySharesTweak)
+                    {
+                        leafTweak.PubkeySharesTweak.Add(k, v);
+                    }
+
+                    perSoPackages[so.SoId].LeavesToReceive.Add(leafTweak);
+                }
+
+                return newPubKey;
             }
             finally
             {
@@ -257,7 +415,6 @@ public sealed class SparkSigner : ISparkSigner
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(identityPriv);
             if (oldKey is not null) CryptographicOperations.ZeroMemory(oldKey);
             if (newKey is not null) CryptographicOperations.ZeroMemory(newKey);
         }
@@ -332,20 +489,40 @@ public sealed class SparkSigner : ISparkSigner
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
-    public Task<PreimageShareSplitResult> CreatePreimageSharesAsync(
+    public Task<EncryptedPreimageShareBundle> BuildEncryptedPreimageSharesAsync(
         string transferId,
+        IReadOnlyList<SoTarget> soTargets,
         uint threshold,
-        uint numShares,
         CancellationToken ct = default)
     {
+        ArgumentException.ThrowIfNullOrEmpty(transferId);
+        ArgumentNullException.ThrowIfNull(soTargets);
+
         var preimage = _keys.ComputePreimage(transferId);
         try
         {
             var paymentHash = SHA256.HashData(preimage);
-            var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(preimage, threshold, numShares);
-            return Task.FromResult(new PreimageShareSplitResult(
-                PaymentHash: paymentHash,
-                Shares: ConvertShares(shares)));
+            var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(
+                preimage, threshold, (uint)soTargets.Count);
+
+            var encryptedBySo = new Dictionary<string, byte[]>(soTargets.Count);
+            foreach (var so in soTargets)
+            {
+                var share = shares.First(s => s.@index == so.ShareIndex);
+                var proto = new ProtoSecretShare
+                {
+                    SecretShare_ = ByteString.CopyFrom(share.@share),
+                };
+                foreach (var proof in share.@proofs)
+                {
+                    proto.Proofs.Add(ByteString.CopyFrom(proof));
+                }
+
+                var protoBytes = proto.ToByteArray();
+                encryptedBySo[so.SoId] = SparkFrostMethods.EncryptEcies(protoBytes, so.IdentityPublicKey);
+            }
+
+            return Task.FromResult(new EncryptedPreimageShareBundle(paymentHash, encryptedBySo));
         }
         finally
         {
@@ -379,17 +556,6 @@ public sealed class SparkSigner : ISparkSigner
         foreach (var (id, c) in soCommitments)
         {
             result[id] = new FrostSigningCommitment(hiding: c.Hiding, binding: c.Binding);
-        }
-        return result;
-    }
-
-    private static IReadOnlyList<FrostVssShare> ConvertShares(List<VerifiableSecretShareResult> raw)
-    {
-        var result = new FrostVssShare[raw.Count];
-        for (int i = 0; i < raw.Count; i++)
-        {
-            var item = raw[i];
-            result[i] = new FrostVssShare(item.@index, item.@share, item.@proofs);
         }
         return result;
     }

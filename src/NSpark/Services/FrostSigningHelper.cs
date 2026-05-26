@@ -152,6 +152,25 @@ internal static class FrostSigningHelper
     internal static string GetNetworkString(SparkNetwork network)
         => network == SparkNetwork.Mainnet ? "mainnet" : "regtest";
 
+    /// <summary>
+    /// Build the list of <see cref="SoTarget"/>s the signer needs to address its encrypted
+    /// share bundles. Cross-references the live SO list from gRPC (for the 1-based share
+    /// index) with the static SO config (for each operator's identity public key).
+    /// </summary>
+    internal static IReadOnlyList<SoTarget> BuildSoTargets(
+        Google.Protobuf.Collections.MapField<string, NSpark.Proto.SigningOperatorInfo> soOperators,
+        NSpark.SigningOperatorConfig[] soConfigs)
+    {
+        var targets = new List<SoTarget>(soOperators.Count);
+        foreach (var (soId, soInfo) in soOperators)
+        {
+            var soConfig = soConfigs.First(c => c.Identifier == soId);
+            var pubKey = Convert.FromHexString(soConfig.IdentityPublicKeyHex);
+            targets.Add(new SoTarget(soId, (uint)(soInfo.Index + 1), pubKey));
+        }
+        return targets;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Internal builders
     // ─────────────────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
-using System.Text;
 using Google.Protobuf;
 using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
+using NSpark.Signer;
 using uniffi.spark_frost;
 
 namespace NSpark.Services;
@@ -305,65 +305,17 @@ public static class WithdrawalService
         var soCount = (uint)soOperators.Count;
         var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
 
-        var perSoTweaks = new Dictionary<string, SendLeafKeyTweaks>();
-        foreach (var (soId, _) in soOperators)
+        var soTargets = FrostSigningHelper.BuildSoTargets(soOperators, wallet.Client.Options.SigningOperators);
+        var leafDescriptors = selectedLeaves
+            .Select(l => new NSpark.Signer.SendTweakLeafDescriptor(l.Id, receiverPubKey))
+            .ToList();
+        var encryptedBatch = await wallet.Signer.BuildEncryptedSendTweaksAsync(
+            leafDescriptors, soTargets, transferId, threshold, ct).ConfigureAwait(false);
+
+        var keyTweakPackage = new Dictionary<string, ByteString>(encryptedBatch.EncryptedPackageBySoId.Count);
+        foreach (var (soId, blob) in encryptedBatch.EncryptedPackageBySoId)
         {
-            perSoTweaks[soId] = new SendLeafKeyTweaks();
-        }
-
-        foreach (var leaf in selectedLeaves)
-        {
-            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
-                leaf.Id, receiverPubKey, threshold, soCount, ct).ConfigureAwait(false);
-            var secretCipher = tweak.SecretCipher;
-
-            var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
-            sigPayload = [.. sigPayload, .. secretCipher];
-            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(
-                SHA256.HashData(sigPayload), ct).ConfigureAwait(false);
-
-            var pubkeySharesTweak = new Dictionary<string, ByteString>();
-            foreach (var (soId, soInfo) in soOperators)
-            {
-                var matchedShare = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
-                pubkeySharesTweak[soId] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
-            }
-
-            foreach (var (soId, soInfo) in soOperators)
-            {
-                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
-                var leafTweak = new SendLeafKeyTweak
-                {
-                    LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
-                    SecretCipher = ByteString.CopyFrom(secretCipher),
-                    Signature = ByteString.CopyFrom(tweakSig),
-                };
-                foreach (var proof in share.Proofs)
-                {
-                    leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
-                }
-
-                foreach (var (k, v) in pubkeySharesTweak)
-                {
-                    leafTweak.PubkeySharesTweak.Add(k, v);
-                }
-
-                perSoTweaks[soId].LeavesToSend.Add(leafTweak);
-            }
-        }
-
-        // Encrypt per-SO key tweak packages
-        var soConfigs = wallet.Client.Options.SigningOperators;
-        var keyTweakPackage = new Dictionary<string, ByteString>();
-        foreach (var (soId, _) in soOperators)
-        {
-            var tweaksBytes = perSoTweaks[soId].ToByteArray();
-            var soConfig = soConfigs.First(c => c.Identifier == soId);
-            var soIdentityPubKey = Convert.FromHexString(soConfig.IdentityPublicKeyHex);
-            var encrypted = SparkFrostMethods.EncryptEcies(tweaksBytes, soIdentityPubKey);
-            keyTweakPackage[soId] = ByteString.CopyFrom(encrypted);
+            keyTweakPackage[soId] = ByteString.CopyFrom(blob);
         }
 
         // Build TransferPackage with aggregated signatures + key tweaks
