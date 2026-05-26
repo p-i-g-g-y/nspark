@@ -62,7 +62,7 @@ public sealed class ZapReceiver(SparkConnection spark, INostrPublisher nostr)
             System.Text.Encoding.UTF8.GetBytes(zapRequestJson));
 
         // 3. Issue the invoice.
-        var wallet = spark.CreateWallet(recipientMnemonic);
+        var wallet = await spark.CreateWalletAsync(recipientMnemonic, ct: ct);
         var invoice = await wallet.CreateLightningInvoiceAsync(
             amountSats: amountSats,
             descriptionHash: descriptionHash,

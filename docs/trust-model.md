@@ -68,7 +68,7 @@ secured — but it can:
 
 | Threat | Recommendation |
 |---|---|
-| **Host process compromise** (memory dump, ptrace, etc.) | NSpark assumes the host is trusted. Sensitive material is cleared best-effort via `CryptographicOperations.ZeroMemory` where the SDK owns the buffer, but the GC can move arrays and NBitcoin retains key state. Use process isolation (containers, dedicated VMs) for sensitive deployments. |
+| **Host process compromise** (memory dump, ptrace, etc.) | NSpark assumes the host is trusted. With the default `SparkSigner` the wallet process holds the BIP-39 master key state (via NBitcoin's `ExtKey`) for the lifetime of the signer. Sensitive intermediates (derived leaf keys, FROST nonces, VSS shares, tweak signature payloads, decrypted ECIES output) live only inside `SparkSigner` method scopes and are cleared via `CryptographicOperations.ZeroMemory` on the way out — none of them ever cross into the rest of the wallet process. For deployments that can't trust the wallet host, implement `ISparkSigner` against an HSM/KMS/remote service (see [`signer.md`](signer.md)): no plaintext key material, no shares, no preimages enter the wallet's address space at all. |
 | **Mnemonic theft from disk / env** | NSpark accepts a `string mnemonic`. Loading it from a sealed secret store and avoiding string interning is the consumer's responsibility. For high-assurance setups, implement `ISparkSigner` directly against a hardware wallet or HSM and never let the mnemonic enter NSpark. |
 | **Compromised user-supplied signer** | A faulty/malicious `ISparkSigner` implementation can produce invalid signatures or leak private keys. Audit any custom signer carefully. |
 | **Colluding majority of SOs** | Out of scope. Choose operators you trust collectively. |

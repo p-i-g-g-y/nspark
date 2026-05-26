@@ -60,11 +60,16 @@ built from a BIP-39 mnemonic via NBitcoin.
 
 ```csharp
 const string mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-var wallet = spark.CreateWallet(mnemonic);
+var wallet = await spark.CreateWalletAsync(mnemonic);
 
 Console.WriteLine($"Wallet identity: {wallet.IdentityPublicKeyHex}");
 Console.WriteLine($"Spark address: {wallet.GetSparkAddress()}");
 ```
+
+`CreateWalletAsync` performs one round-trip to the signer to fetch and
+cache the identity + deposit public keys, so synchronous accessors like
+`wallet.IdentityPublicKeyHex` and `wallet.GetSparkAddress()` stay
+non-async afterwards.
 
 > **Never** check a real mnemonic into source control or store it as a
 > string literal in production. See [`docs/signer.md`](signer.md) for

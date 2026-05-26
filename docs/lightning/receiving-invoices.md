@@ -22,7 +22,7 @@ using NSpark.Services;
 
 // One-time per process.
 await using var spark = new SparkConnection(options, http);
-var wallet = spark.CreateWallet(mnemonic);
+var wallet = await spark.CreateWalletAsync(mnemonic);
 
 // 1. Create a BOLT11 invoice.
 var invoice = await wallet.CreateLightningInvoiceAsync(

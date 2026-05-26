@@ -50,7 +50,7 @@ using NSpark.Services;
 var options = Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet });
 using var http = new HttpClient();
 await using var spark = new SparkConnection(options, http);
-var wallet = spark.CreateWallet(mnemonic);
+var wallet = await spark.CreateWalletAsync(mnemonic);
 
 var balance = await wallet.GetBalanceAsync();
 ```

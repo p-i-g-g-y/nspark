@@ -1,12 +1,18 @@
-# Custom signers (HSM, KMS, hardware wallets)
+# Custom signers (HSM, KMS, hardware wallets, remote services)
 
 NSpark separates **what to sign** from **how to sign**. Every wallet
 operation goes through an `ISparkSigner`, and the default
 `SparkSigner` is a BIP-39 mnemonic-backed implementation built on
-NBitcoin. If your application's key custody is outside the process
-(HSM, AWS KMS, Azure Key Vault, hardware wallet, remote signer
-service), implement `ISparkSigner` directly and never let a mnemonic
-near NSpark.
+NBitcoin + the native `spark_frost` Rust library. If your application's
+key custody is outside the process (HSM, AWS KMS, Azure Key Vault,
+hardware wallet, remote signer service), implement `ISparkSigner`
+directly and never let a mnemonic near NSpark.
+
+The contract is shaped so that **no plaintext key material, no VSS
+shares, no intermediate signing keys, and no tweak-signature payloads
+ever cross the wallet's address space**. Everything sensitive happens
+inside the signer; the wallet only handles encrypted blobs and
+signatures.
 
 ## The contract
 
@@ -15,29 +21,82 @@ namespace NSpark.Signer;
 
 public interface ISparkSigner
 {
-    byte[] IdentityPublicKey { get; }       // 33-byte compressed secp256k1
-    byte[] IdentityPrivateKey { get; }      // 32-byte scalar (used for ECIES)
-    byte[] DepositPublicKey { get; }        // 33-byte compressed secp256k1
+    // ── Identity ────────────────────────────────────────────────────────────
+    Task<byte[]> GetIdentityPublicKeyAsync(CancellationToken ct = default);
+    Task<byte[]> SignWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);          // DER
+    Task<byte[]> SignCompactWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);   // 64-byte r||s
+    Task<byte[]> DecryptEciesWithIdentityKeyAsync(byte[] ciphertext, CancellationToken ct = default);
 
-    byte[] SignWithIdentityKey(byte[] messageHash);          // DER signature
-    byte[] SignCompactWithIdentityKey(byte[] messageHash);   // 64-byte r||s
+    // ── Deposit ─────────────────────────────────────────────────────────────
+    Task<byte[]> GetDepositPublicKeyAsync(CancellationToken ct = default);
 
-    byte[] DeriveLeafSigningKey(string leafId);   // per-leaf private key
-    byte[] DeriveStaticDepositKey(int index);     // per-index private key
+    // ── Per-leaf signing ────────────────────────────────────────────────────
+    Task<byte[]> GetLeafPublicKeyAsync(string leafId, CancellationToken ct = default);
 
-    byte[] GeneratePreimage(string transferId);   // deterministic HMAC
+    Task<LeafFrostSignature> SignLeafFrostAsync(
+        string leafId,
+        byte[] message,
+        byte[] verifyingKey,
+        IReadOnlyDictionary<string, SigningCommitment> soCommitments,
+        byte[]? adaptorPublicKey = null,
+        CancellationToken ct = default);
 
-    byte[] FrostSign(
-        byte[] message, byte[] signingKey,
-        byte[] groupKey, byte[] commitmentSeed);
+    Task<LeafFrostNonceCommitment> GenerateLeafFrostNonceAsync(
+        string leafId,
+        CancellationToken ct = default);
 
-    (byte[] hiding, byte[] binding) GenerateFrostCommitments(byte[] signingKey);
+    Task<byte[]> SignLeafFrostWithNonceAsync(
+        string leafId,
+        byte[] nonceHandle,
+        byte[] message,
+        byte[] verifyingKey,
+        IReadOnlyDictionary<string, SigningCommitment> soCommitments,
+        byte[]? adaptorPublicKey = null,
+        CancellationToken ct = default);
+
+    // ── Per-leaf tweak batches (transfer / claim) ───────────────────────────
+    Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
+        IReadOnlyList<SendTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
+        string transferId,
+        uint threshold,
+        CancellationToken ct = default);
+
+    Task<EncryptedClaimTweakBatch> BuildEncryptedClaimTweaksAsync(
+        IReadOnlyList<ClaimTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
+        uint threshold,
+        CancellationToken ct = default);
+
+    // ── Static deposit ──────────────────────────────────────────────────────
+    Task<byte[]> GetStaticDepositPublicKeyAsync(int index = 0, CancellationToken ct = default);
+    Task<byte[]> ExportStaticDepositPrivateKeyAsync(int index = 0, CancellationToken ct = default);
+
+    Task<LeafFrostNonceCommitment> GenerateStaticDepositFrostNonceAsync(
+        int index, CancellationToken ct = default);
+
+    Task<byte[]> SignStaticDepositFrostWithNonceAsync(
+        int index,
+        byte[] nonceHandle,
+        byte[] message,
+        byte[] verifyingKey,
+        IReadOnlyDictionary<string, SigningCommitment> soCommitments,
+        CancellationToken ct = default);
+
+    // ── Lightning receive preimage ──────────────────────────────────────────
+    Task<EncryptedPreimageShareBundle> BuildEncryptedPreimageSharesAsync(
+        string transferId,
+        IReadOnlyList<SoTarget> soTargets,
+        uint threshold,
+        CancellationToken ct = default);
+
+    // ── Swap adaptor key ────────────────────────────────────────────────────
+    Task<AdaptorKeyHandle> GenerateAdaptorKeyAsync(CancellationToken ct = default);
 }
 ```
 
-Every member returns raw bytes — no NBitcoin or BouncyCastle types leak
-through the interface — so a remote signer can implement it with any
-crypto backend.
+Every member is async, returns raw bytes or DTO records, and takes a
+`CancellationToken` — no NBitcoin or BouncyCastle types leak through.
 
 ## When to implement a custom signer
 
@@ -48,7 +107,8 @@ crypto backend.
 | Multi-tenant service, one wallet per user                | Default, one signer per request      |
 | Hardware wallet (Ledger, BitBox, etc.)                   | **Custom `ISparkSigner`**            |
 | HSM / KMS-backed enterprise wallet                       | **Custom `ISparkSigner`**            |
-| You never want the private key in process memory         | **Custom `ISparkSigner`**            |
+| Remote signing microservice                              | **Custom `ISparkSigner`**            |
+| You never want any private key in process memory         | **Custom `ISparkSigner`**            |
 
 ## How to plug a custom signer in
 
@@ -63,149 +123,292 @@ public sealed class HsmSparkSigner : ISparkSigner
 
 // Use it:
 var signer = new HsmSparkSigner(/* HSM session */);
-SparkWallet wallet = spark.CreateWallet(signer);  // bypasses mnemonic
+SparkWallet wallet = await spark.CreateWalletAsync(signer);  // bypasses mnemonic
 ```
 
-`CreateWallet(ISparkSigner)` is the API entry-point that accepts any
+`CreateWalletAsync(ISparkSigner)` is the entry-point that accepts any
 implementation. `SparkConnection` itself is unchanged — the same
 singleton handles HSM-backed wallets and mnemonic-backed wallets side
-by side.
+by side. The construction call performs **one** round-trip to the signer
+to fetch and cache the identity + deposit public keys so subsequent
+accessors (`wallet.IdentityPublicKey`, `wallet.GetSparkAddress()`,
+`wallet.DepositPublicKey`) stay synchronous.
 
 ## Per-member implementation guide
 
-### `IdentityPublicKey` and `IdentityPrivateKey`
+### Identity key — `GetIdentityPublicKeyAsync`, `SignWithIdentityKeyAsync`, `SignCompactWithIdentityKeyAsync`, `DecryptEciesWithIdentityKeyAsync`
 
-The wallet's BIP-44-style identity key. NSpark uses the **public** half
-constantly: every SO authentication, every transfer build, every Spark
-address. The **private** half is used directly for:
+The wallet's BIP-44-style identity key.
 
-- ECDSA signing of SO/SSP challenge bytes (`SignWithIdentityKey`,
-  `SignCompactWithIdentityKey`).
-- ECIES decryption when the SO returns encrypted shares back to the
-  wallet (token mint flows).
-- The HMAC key for `GeneratePreimage` (Lightning receive preimages).
+- `GetIdentityPublicKeyAsync` — 33-byte compressed secp256k1 point. Used
+  for SO/SSP authentication, transfer construction, and as the Spark
+  address payload. Called once at wallet construction and cached.
+- `SignWithIdentityKeyAsync` — ECDSA over secp256k1, returns DER. Input
+  is **already** the 32-byte hash. Used for SO/SSP challenge-response
+  authentication, transfer package signatures, claim package signatures,
+  static-deposit claim payload signatures, token mint/transfer per-input
+  + per-operator signatures.
+- `SignCompactWithIdentityKeyAsync` — same key, same input, but returns
+  a 64-byte compact `r || s` signature. Used internally by the default
+  signer when building per-leaf tweak signatures inside
+  `BuildEncryptedSendTweaksAsync`. Most external custom signers won't
+  see this called directly because the tweak-signature step lives inside
+  the encrypted-batch flow.
+- `DecryptEciesWithIdentityKeyAsync` — ECIES decryption of a ciphertext
+  addressed to the identity key. The default signer's
+  `BuildEncryptedClaimTweaksAsync` calls this internally to recover the
+  sender's intermediate signing key from `secret_cipher` blobs; a
+  custom signer that overrides `BuildEncryptedClaimTweaksAsync` doesn't
+  need to expose this externally.
 
-For an HSM-backed signer, exposing `IdentityPrivateKey` as a real scalar
-is the awkward part — the only required consumers are ECIES decryption
-and the HMAC for preimages. Two patterns:
-
-- **Acceptable**: Keep the identity key in software (it controls
-  Lightning preimages anyway), put **only the leaf signing keys** in the
-  HSM.
-- **Strict**: Implement ECIES decryption and HMAC inside the HSM
-  itself; have `IdentityPrivateKey` throw `NotSupportedException` and
-  override the consumer paths (more invasive — file an issue if you
-  need this).
-
-### `DepositPublicKey`
+### Deposit key — `GetDepositPublicKeyAsync`
 
 Used as the user-side spending key inside the FROST-shared deposit
 tree. The corresponding private key never needs to sign anything at the
 client; it just contributes to the deposit address derivation.
 
-### `SignWithIdentityKey` / `SignCompactWithIdentityKey`
+### Per-leaf signing
 
-ECDSA over secp256k1 with SHA-256 as the message hash function. The
-input is **already** the 32-byte hash — your signer does **not** hash
-again. The DER form is used for SO/SSP authentication; the compact
-(64-byte `r || s`) form is used for leaf key-tweak signatures in
-transfer/withdrawal flows.
-
-### `DeriveLeafSigningKey(leafId)`
-
-Returns the 32-byte private scalar that signs per-leaf FROST messages.
-The default derives this via BIP-32 hardened derivation:
+`GetLeafPublicKeyAsync(leafId)` returns the 33-byte compressed public
+key for the per-leaf signing key. The default derives this via BIP-32
+hardened derivation:
 `m/8797555' / account' / 1' / (SHA256(leafId)[0:4] % 2^31 + 2^31)`.
 A custom signer can pick any deterministic scheme as long as the same
-leaf id always maps to the same key.
+leaf id always maps to the same public key.
 
-### `DeriveStaticDepositKey(index)`
+`SignLeafFrostAsync(leafId, message, verifyingKey, soCommitments, adaptorPublicKey?)`
+runs a complete one-shot FROST signing round: generate the user's
+hiding+binding nonce, sign the message against the supplied SO
+commitments, return `(publicKey, commitment, userSignature)`. Used by
+transfer / claim / Lightning send / swap / deposit-tree-creation
+flows.
 
-Same shape, different parent (BIP-44 child index 3 instead of 1).
+`GenerateLeafFrostNonceAsync` / `SignLeafFrostWithNonceAsync` form a
+**two-phase** signing protocol. Phase 1 returns the user's commitment
+plus an opaque `nonceHandle`. The wallet publishes the commitment to
+the SOs, the SOs return the final transaction (e.g., the
+cooperative-exit tx with the connector input added), the wallet
+computes the resulting sighash, and phase 2 signs that sighash using
+the same nonce. The handle is opaque — for the default in-process
+signer it carries the secret nonce + the public commitment so phase 2
+doesn't need any extra state; for a remote signer it can be an
+encrypted blob or a server-side key.
 
-### `GeneratePreimage(transferId)`
+### Per-leaf tweak batches — `BuildEncryptedSendTweaksAsync`, `BuildEncryptedClaimTweaksAsync`
 
-A 32-byte preimage that **must be deterministic** for the same
-`transferId` — Lightning HTLC settlement looks up by payment hash, so
-re-deriving the same preimage from the same transfer id is the only way
-to recover after a crash. The default uses `HMAC-SHA256(htlcPreimageKey,
-UTF8(transferId))`.
+These are the heart of the encrypted-batch design. The wallet
+never sees raw shares, intermediate signing keys, or tweak signature
+payloads — the signer does the whole pipeline and returns
+ECIES-encrypted `SendLeafKeyTweaks` / `ClaimLeafKeyTweaks` proto blobs
+ready to go on the wire.
 
-### `FrostSign` and `GenerateFrostCommitments`
+`BuildEncryptedSendTweaksAsync(leaves, soTargets, transferId, threshold)`
+— for each leaf:
 
-These delegate to the native `spark_frost` Rust library via UniFFI
-bindings — the same library every Spark SDK uses. A custom signer can
-delegate to the same native library (the bindings are public in
-`uniffi.spark_frost` namespace) or re-implement FROST round signing
-against its own crypto backend (much more work; not recommended).
+1. Derive the leaf's current signing key
+2. Generate a fresh intermediate signing key
+3. Compute `tweak = (oldKey - newKey) mod n`
+4. VSS-split the tweak into `soTargets.Count` shares
+5. ECIES-encrypt the intermediate key to the leaf's `ReceiverPublicKey`
+   → `secret_cipher`
+6. Sign `SHA256(leafId || transferId || secret_cipher)` with the
+   compact ECDSA identity-key signature
+7. Build one `SendLeafKeyTweak` proto per (leaf, SO) pair with the
+   correct share, secret_cipher, signature, and per-SO pubkey-shares
+   map
+8. Fold all leaves into one `SendLeafKeyTweaks` proto per SO
+9. ECIES-encrypt each per-SO proto to that SO's identity public key
+10. Return `{ soId → encryptedBlob }`
+
+`BuildEncryptedClaimTweaksAsync` is the mirror operation for the
+receive side: ECIES-decrypts the sender's `secret_cipher`, derives the
+receiver's new per-leaf signing key, computes the tweak, VSS-splits,
+and ECIES-encrypts per-SO `ClaimLeafKeyTweaks` blobs. The new per-leaf
+public key for each leaf is returned alongside (the wallet needs it as
+the receiving pubkey when constructing refund txs).
+
+### Static deposit
+
+`GetStaticDepositPublicKeyAsync(index)` returns the public key. Used to
+generate the on-chain static deposit address.
+
+`GenerateStaticDepositFrostNonceAsync` / `SignStaticDepositFrostWithNonceAsync`
+are the same two-phase FROST signing protocol described above, but for
+the static-deposit signing key. Used by the static-deposit refund flow.
+
+`ExportStaticDepositPrivateKeyAsync(index)` — this is the **one**
+intentional private-key escape hatch in the signer surface. The Spark
+static-deposit protocol requires revealing the raw private key to the
+SSP so the SSP can sweep the on-chain UTXO into a leaf. HSM-backed
+signers that refuse to export raw key material should throw
+`NotSupportedException`; static-deposit claims (`ClaimStaticDepositAsync`)
+will then be unavailable, but every other operation works normally.
+
+### Lightning preimage — `BuildEncryptedPreimageSharesAsync`
+
+The Lightning receive flow doesn't generate a random preimage — it
+asks the signer to deterministically derive one from `transferId`
+(default impl: `HMAC-SHA256(htlcPreimageKey, UTF8(transferId))`),
+hash it to produce the BOLT11 payment hash, VSS-split it into
+per-SO shares, wrap each share in a `SecretShare` proto, and ECIES-
+encrypt that proto to the matching SO's identity public key. The
+preimage and the raw share scalars never leave the signer; only the
+public payment hash and the per-SO encrypted blobs do.
+
+Determinism is load-bearing: if the wallet crashes between issuing the
+invoice and storing the shares with the SOs, calling this method again
+with the same `transferId` MUST produce the same payment hash so the
+in-flight payment can still be claimed.
+
+### Swap adaptor key — `GenerateAdaptorKeyAsync`
+
+Returns `(PublicKey, Handle)` where the handle is opaque to the wallet.
+The default impl puts the raw 32-byte private scalar inside the handle
+(in-process trust boundary); a remote signer can put any opaque token.
+Currently the wallet uses only the public key (the private half is
+reserved for the future swap-completion path).
 
 ## Reference: minimal signer that proxies a remote service
 
 ```csharp
+using NSpark.Signer;
+using NSpark.Services;
+// Hypothetical async client to your signing service:
+public interface IRemoteSigner
+{
+    Task<byte[]> GetPublicKeyAsync(string id, CancellationToken ct);
+    Task<byte[]> SignDerAsync(string keyId, byte[] hash, CancellationToken ct);
+    Task<byte[]> SignCompactAsync(string keyId, byte[] hash, CancellationToken ct);
+    Task<byte[]> DecryptEciesAsync(string keyId, byte[] ciphertext, CancellationToken ct);
+    Task<byte[]> GetLeafPublicKeyAsync(string leafId, CancellationToken ct);
+
+    Task<(byte[] PublicKey, byte[] HidingCommit, byte[] BindingCommit, byte[] UserSig)>
+        SignLeafFrostAsync(
+            string leafId, byte[] message, byte[] verifyingKey,
+            IReadOnlyDictionary<string, (byte[] H, byte[] B)> soCommitments,
+            byte[]? adaptorPubKey, CancellationToken ct);
+
+    Task<IReadOnlyDictionary<string, byte[]>> BuildEncryptedSendTweaksAsync(
+        IReadOnlyList<(string LeafId, byte[] ReceiverPubKey)> leaves,
+        IReadOnlyList<(string SoId, uint ShareIdx, byte[] SoPubKey)> soTargets,
+        string transferId, uint threshold, CancellationToken ct);
+    // ... etc ...
+}
+
 public sealed class RemoteSparkSigner : ISparkSigner
 {
     private readonly IRemoteSigner _remote;
-    private byte[]? _identityPubKey;
-    private byte[]? _depositPubKey;
-
     public RemoteSparkSigner(IRemoteSigner remote) => _remote = remote;
 
-    public byte[] IdentityPublicKey
-        => _identityPubKey ??= _remote.GetPublicKey("identity").Result;
+    public Task<byte[]> GetIdentityPublicKeyAsync(CancellationToken ct = default)
+        => _remote.GetPublicKeyAsync("identity", ct);
 
-    public byte[] DepositPublicKey
-        => _depositPubKey ??= _remote.GetPublicKey("deposit").Result;
+    public Task<byte[]> GetDepositPublicKeyAsync(CancellationToken ct = default)
+        => _remote.GetPublicKeyAsync("deposit", ct);
 
-    public byte[] IdentityPrivateKey
+    public Task<byte[]> GetLeafPublicKeyAsync(string leafId, CancellationToken ct = default)
+        => _remote.GetLeafPublicKeyAsync(leafId, ct);
+
+    public Task<byte[]> GetStaticDepositPublicKeyAsync(int index = 0, CancellationToken ct = default)
+        => _remote.GetPublicKeyAsync($"static-deposit:{index}", ct);
+
+    public Task<byte[]> SignWithIdentityKeyAsync(byte[] hash, CancellationToken ct = default)
+        => _remote.SignDerAsync("identity", hash, ct);
+
+    public Task<byte[]> SignCompactWithIdentityKeyAsync(byte[] hash, CancellationToken ct = default)
+        => _remote.SignCompactAsync("identity", hash, ct);
+
+    public Task<byte[]> DecryptEciesWithIdentityKeyAsync(byte[] ciphertext, CancellationToken ct = default)
+        => _remote.DecryptEciesAsync("identity", ciphertext, ct);
+
+    public async Task<LeafFrostSignature> SignLeafFrostAsync(
+        string leafId, byte[] message, byte[] verifyingKey,
+        IReadOnlyDictionary<string, SigningCommitment> soCommitments,
+        byte[]? adaptorPublicKey = null, CancellationToken ct = default)
+    {
+        var soMap = soCommitments.ToDictionary(
+            kv => kv.Key,
+            kv => (kv.Value.Hiding, kv.Value.Binding));
+        var r = await _remote.SignLeafFrostAsync(
+            leafId, message, verifyingKey, soMap, adaptorPublicKey, ct);
+        return new LeafFrostSignature(
+            r.PublicKey,
+            new SigningCommitment(r.HidingCommit, r.BindingCommit),
+            r.UserSig);
+    }
+
+    public async Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
+        IReadOnlyList<SendTweakLeafDescriptor> leaves,
+        IReadOnlyList<SoTarget> soTargets,
+        string transferId, uint threshold, CancellationToken ct = default)
+    {
+        var leafTuples = leaves.Select(l => (l.LeafId, l.ReceiverPublicKey)).ToList();
+        var soTuples = soTargets.Select(s => (s.SoId, s.ShareIndex, s.IdentityPublicKey)).ToList();
+        var blobs = await _remote.BuildEncryptedSendTweaksAsync(
+            leafTuples, soTuples, transferId, threshold, ct);
+        return new EncryptedSendTweakBatch(blobs);
+    }
+
+    // ... GenerateLeafFrostNonceAsync, SignLeafFrostWithNonceAsync,
+    //     BuildEncryptedClaimTweaksAsync, BuildEncryptedPreimageSharesAsync,
+    //     GenerateStaticDepositFrostNonceAsync, SignStaticDepositFrostWithNonceAsync,
+    //     ExportStaticDepositPrivateKeyAsync, GenerateAdaptorKeyAsync ...
+
+    public Task<AdaptorKeyHandle> GenerateAdaptorKeyAsync(CancellationToken ct = default)
+        => throw new NotImplementedException("see sketch above");
+
+    public Task<byte[]> ExportStaticDepositPrivateKeyAsync(int index = 0, CancellationToken ct = default)
         => throw new NotSupportedException(
-            "Identity private key is not exposed; ECIES happens in the remote signer.");
+            "Static deposit private keys cannot be exported from the remote signer. " +
+            "ClaimStaticDepositAsync is unavailable; use the cooperative-exit flow instead.");
 
-    public byte[] SignWithIdentityKey(byte[] messageHash)
-        => _remote.Sign("identity", messageHash, format: "der").Result;
-
-    public byte[] SignCompactWithIdentityKey(byte[] messageHash)
-        => _remote.Sign("identity", messageHash, format: "compact").Result;
-
-    public byte[] DeriveLeafSigningKey(string leafId)
-        => _remote.DeriveKey("leaf", leafId).Result;
-
-    public byte[] DeriveStaticDepositKey(int index)
-        => _remote.DeriveKey("static-deposit", index.ToString()).Result;
-
-    public byte[] GeneratePreimage(string transferId)
-        => _remote.HmacSha256("htlc-preimage", transferId).Result;
-
-    public byte[] FrostSign(byte[] m, byte[] sk, byte[] gk, byte[] cs)
-        => _remote.FrostSign(m, sk, gk, cs).Result;
-
-    public (byte[] hiding, byte[] binding) GenerateFrostCommitments(byte[] sk)
-        => _remote.FrostCommit(sk).Result;
+    // ... remaining methods left as exercise; pattern is the same ...
 }
 ```
 
-This is intentionally synchronous (`.Result`) because `ISparkSigner` is
-sync. If your remote signer is async-only, gate calls through a bounded
-work queue rather than wrapping `Task.Result` everywhere — see the
-[Polly bulkhead](https://www.pollydocs.org/strategies/rate-limiter.html)
-strategy or your own dispatcher.
+Because the interface is fully async, the call sites use `await`
+naturally — no `.Result` deadlocks, no thread-pool starvation, no
+need for Polly bulkhead workarounds.
+
+## Composing existing primitives
+
+If a custom signer doesn't want to implement everything from scratch,
+two public helpers are available outside the signer itself:
+
+- **`NSpark.Services.SparkTxBuilder`** — public Spark-protocol Bitcoin
+  transaction construction (refund tx trio, HTLC tx, node tx pair,
+  multi-input sighash). Pure public-key operations; safe to call from
+  any custom signer that needs to construct the same protocol-level
+  transactions.
+- **`NSpark.Signer.FrostAggregator`** — public FROST signature
+  aggregation (combine self + SO partial signatures into the final
+  signature). Pure public-key operation. Useful inside custom
+  `SignLeafFrostWithNonceAsync` implementations when you need to
+  aggregate the result before returning.
+
+Both helpers are safe to call outside any signer trust boundary — they
+take only public material.
 
 ## Threading and reentrancy
 
 Every method on `ISparkSigner` is called on whichever thread the wallet
-operation runs on. The default `SparkSigner` is thread-safe by virtue of
-NBitcoin's immutability. **Your implementation must also be
-thread-safe** — `SparkWallet.SendAsync` can run concurrently with
-`SparkWallet.PayLightningInvoiceAsync` against the same signer.
+operation runs on, often in parallel during leaf-heavy flows. The
+default `SparkSigner` is thread-safe by virtue of NBitcoin's
+immutability + the per-call key derivation. **Your implementation must
+also be thread-safe** — `SparkWallet.SendAsync` can run concurrently
+with `SparkWallet.PayLightningInvoiceAsync` against the same signer,
+and within a single flow many leaves' nonces / FROST signatures are
+generated in parallel.
 
 ## Memory hygiene
 
 The default signer calls `CryptographicOperations.ZeroMemory(...)` on
-the local HTLC preimage key buffer after `GeneratePreimage`. The
-underlying NBitcoin `ExtKey` retains key material for the lifetime of
-the `SparkSigner` instance — that's an intentional trade-off for FROST
+every locally-materialised private scalar after use. The underlying
+NBitcoin `ExtKey` retains key material for the lifetime of the
+`SparkSigner` instance — that's an intentional trade-off for FROST
 signing performance.
 
-A custom signer that never materializes private keys in managed memory
+A custom signer that never materialises private keys in managed memory
 (HSM/KMS) doesn't need this — the keys never leave the secure
 boundary. See [`trust-model.md`](trust-model.md) for the documented
 process-trust assumption.
@@ -214,18 +417,23 @@ process-trust assumption.
 
 Three integration points to verify:
 
-1. **Identity round-trip**: `SignWithIdentityKey(SHA256(challenge))` →
-   verify with NBitcoin against `IdentityPublicKey`.
-2. **Per-leaf determinism**: `DeriveLeafSigningKey("leaf-1")` returns
+1. **Identity round-trip**: `SignWithIdentityKeyAsync(SHA256(challenge))`
+   → verify the signature with any secp256k1 library against
+   `GetIdentityPublicKeyAsync()`.
+2. **Per-leaf determinism**: `GetLeafPublicKeyAsync("leaf-1")` returns
    the same bytes on repeated calls; different leaf ids return
    different bytes.
-3. **FROST signing acceptance**: run `SparkWallet.SendAsync` against a
-   regtest SO cluster; if the SO accepts the transfer, the signer
-   produced valid FROST shares.
+3. **End-to-end acceptance**: run `SparkWallet.SendAsync` against a
+   regtest SO cluster; if the SOs accept the transfer, your signer
+   produced valid FROST partials, valid tweak shares, valid per-SO
+   ECIES packages, and valid identity-key signatures over the
+   package hash.
 
 NSpark's own `SparkFrostBridgeTests` (under
 `tests/NSpark.IntegrationTests/`) exercises the FROST primitives
 directly — copy that pattern for a custom signer's regression suite.
+The `[Explicit]` tests in `SparkWalletIntegrationTests.cs` are a
+ready-made acceptance suite when pointed at a funded regtest cluster.
 
 ## See also
 

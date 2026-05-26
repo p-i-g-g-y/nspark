@@ -36,7 +36,7 @@ await using var spark = new SparkConnection(options, http);
 
 // Use a real mnemonic in production — derive once and store securely.
 const string mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-var wallet = spark.CreateWallet(mnemonic);
+var wallet = await spark.CreateWalletAsync(mnemonic);
 
 // Receive
 var invoice = await wallet.CreateLightningInvoiceAsync(amountSats: 21_000, memo: "hello world");
@@ -72,7 +72,7 @@ public class InvoicesController(SparkConnection spark) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(long sats, string memo, CancellationToken ct)
     {
-        var wallet = spark.CreateWallet(Environment.GetEnvironmentVariable("WALLET_MNEMONIC")!);
+        var wallet = await spark.CreateWalletAsync(Environment.GetEnvironmentVariable("WALLET_MNEMONIC")!, ct: ct);
         var invoice = await wallet.CreateLightningInvoiceAsync(sats, memo, ct: ct);
         return Ok(invoice);
     }

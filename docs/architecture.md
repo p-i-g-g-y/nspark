@@ -21,11 +21,12 @@ to Spark Signing Operators (SOs) and the Spark Service Provider (SSP).
 │   └─ ILoggerFactory, ActivitySource, Meter, Polly pipeline          │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
-                  CreateWallet(mnemonic | ISparkSigner)
+             await CreateWalletAsync(mnemonic | ISparkSigner)
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  SparkWallet (per-wallet, lightweight)                              │
-│   ├─ ISparkSigner   (BIP-39/32, ECDSA, FROST round delegation)      │
+│   ├─ ISparkSigner   (async: identity, FROST, ECIES, tweak batches)  │
+│   ├─ Cached IdentityPublicKey + DepositPublicKey (sync accessors)   │
 │   └─ SspGraphQLClient   (per-wallet auth token, shared HttpClient)  │
 └─────────────────────────────────────────────────────────────────────┘
                                   │
@@ -42,7 +43,7 @@ to Spark Signing Operators (SOs) and the Spark Service Provider (SSP).
 | Object              | Lifetime                        | Why                                                              |
 | ------------------- | ------------------------------- | ---------------------------------------------------------------- |
 | `SparkConnection`   | Singleton per app               | Owns gRPC channels + auth-token cache; expensive to spin up.     |
-| `SparkWallet`       | Cheap, create one per identity  | Just a tuple of (connection, signer, SSP client). No I/O on ctor. |
+| `SparkWallet`       | Cheap, create one per identity  | Construction performs one round-trip to the signer to cache identity + deposit pubkeys, then no I/O until you call an operation. |
 | `ISparkSigner`      | Lifetime of the wallet          | Holds the key material; replace via DI for HSM-backed wallets.   |
 | gRPC channel        | Lifetime of `SparkConnection`   | HTTP/2 multiplexing — one channel per SO is enough.              |
 | Auth tokens         | TTL-evicted in `SparkAuthenticator` | Bounded LRU cache (default 1024 entries).                    |
@@ -59,7 +60,8 @@ Then in any controller / handler:
 ```csharp
 public sealed class Wallets(SparkConnection spark)
 {
-    public SparkWallet ForUser(string mnemonic) => spark.CreateWallet(mnemonic);
+    public Task<SparkWallet> ForUserAsync(string mnemonic, CancellationToken ct = default)
+        => spark.CreateWalletAsync(mnemonic, ct: ct);
 }
 ```
 
@@ -152,21 +154,43 @@ Logging uses `Microsoft.Extensions.Logging`. Every log entry carries a
 documented `EventId` from `NSpark.Diagnostics.LogEvents`; see
 [`logging.md`](logging.md) for the full table.
 
-## FROST signing
+## FROST signing & the signer boundary
 
 The cryptographic heart of Spark is a 2-of-N FROST threshold signature
-across the Signing Operators. The wallet:
+across the Signing Operators. NSpark routes **every** private-key
+operation through `ISparkSigner` (see [`signer.md`](signer.md)):
 
-1. Generates VSS shares of the secret material.
-2. Encrypts each share to the corresponding SO's identity public key (ECIES).
-3. Sends the encrypted shares + per-SO signing commitments to the
-   coordinator SO.
+- Per-leaf FROST signing (`SignLeafFrostAsync` one-shot, or
+  `GenerateLeafFrostNonceAsync` + `SignLeafFrostWithNonceAsync` two-phase).
+- Per-leaf tweak shares (`BuildEncryptedSendTweaksAsync`,
+  `BuildEncryptedClaimTweaksAsync`) — the signer generates the VSS shares
+  *and* ECIES-encrypts them per-SO inside its trust boundary; the wallet
+  receives only opaque encrypted blobs.
+- Lightning preimage shares (`BuildEncryptedPreimageSharesAsync`) — same
+  pattern, encrypted per-SO inside the signer.
+- ECDSA over the identity key (`SignWithIdentityKeyAsync`,
+  `SignCompactWithIdentityKeyAsync`) and ECIES decryption
+  (`DecryptEciesWithIdentityKeyAsync`).
 
-The wallet-side crypto is delegated to a Rust library
-(`spark_frost`, the same one the JS/Swift/Kotlin SDKs use) via UniFFI-
-generated C# bindings (`SparkFrostBindings.cs`). The native binaries
-ship inside the NuGet at `runtimes/<rid>/native/` for six RIDs. See
-[`native-build.md`](native-build.md) if you want to rebuild from source.
+The default `SparkSigner` implements all of this in-process via NBitcoin
+(BIP-39/32 key derivation) and the native `spark_frost` Rust library
+(same one the JS/Swift/Kotlin SDKs use) through UniFFI-generated C#
+bindings. The native binaries ship inside the NuGet at
+`runtimes/<rid>/native/` for six RIDs — see [`native-build.md`](native-build.md)
+if you want to rebuild from source.
+
+Two architectural invariants enforced by file layout:
+
+- `using uniffi.spark_frost;` appears in exactly three files —
+  `Signer/SparkSigner.cs` (the default in-process signer),
+  `Signer/FrostAggregator.cs` (public-only FROST aggregation wrapper),
+  and `Services/SparkTxBuilder.cs` (public-only Bitcoin tx
+  construction wrapper). Service code is uniffi-free.
+- No plaintext share material, intermediate signing key, tweak signature
+  payload, or random preimage ever crosses the wallet's address space
+  in the encrypted-batch flows. Custom HSM/KMS-backed `ISparkSigner`
+  implementations can run with zero plaintext private material in the
+  wallet process.
 
 ## The two-claim model
 
