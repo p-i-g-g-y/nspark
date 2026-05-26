@@ -10,6 +10,24 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.2.0-alpha.2] - 2026-05-26
+
+### Docs
+- Full rewrite of `docs/signer.md` for the new async `ISparkSigner` surface:
+  contract listing, per-member implementation guide, encrypted-batch design
+  notes, async `RemoteSparkSigner` reference, pointers to the public
+  `SparkTxBuilder` + `FrostAggregator` helpers.
+- Strengthened `docs/trust-model.md` "host process compromise" row to
+  reflect the encrypted-batch boundary — HSM-backed signers now have zero
+  plaintext private material in the wallet process.
+- `docs/architecture.md` diagram + FROST-signing section updated to
+  `CreateWalletAsync` and the new signer-boundary invariants.
+- `README.md`, `docs/getting-started.md`, `docs/faq.md`,
+  `docs/lightning/receiving-invoices.md`, `docs/lightning/description-hash.md`:
+  every quick-start example uses `await spark.CreateWalletAsync(...)`.
+- No code changes — published to refresh the README bundled into the
+  NuGet package.
+
 ## [0.2.0-alpha.1] - 2026-05-26
 
 ### Breaking — full remote-signing refactor
