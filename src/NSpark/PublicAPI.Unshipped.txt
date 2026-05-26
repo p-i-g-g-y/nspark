@@ -152,11 +152,6 @@ NSpark.Models.LightningSendStatus.Preimage.get -> string?
 NSpark.Models.LightningSendStatus.Preimage.init -> void
 NSpark.Models.LightningSendStatus.Status.get -> string!
 NSpark.Models.LightningSendStatus.Status.init -> void
-override NSpark.Models.LightningSendStatus.Equals(object? obj) -> bool
-override NSpark.Models.LightningSendStatus.GetHashCode() -> int
-override NSpark.Models.LightningSendStatus.ToString() -> string!
-static NSpark.Models.LightningSendStatus.operator !=(NSpark.Models.LightningSendStatus? left, NSpark.Models.LightningSendStatus? right) -> bool
-static NSpark.Models.LightningSendStatus.operator ==(NSpark.Models.LightningSendStatus? left, NSpark.Models.LightningSendStatus? right) -> bool
 NSpark.Models.SatsBalance
 NSpark.Models.SatsBalance.<Clone>$() -> NSpark.Models.SatsBalance!
 NSpark.Models.SatsBalance.Available.get -> long
@@ -345,22 +340,103 @@ NSpark.Services.LightningAddressService
 NSpark.Services.LightningService
 NSpark.Services.PrivacyService
 NSpark.Services.SparkAddress
+NSpark.Services.SparkBitcoinTx
+NSpark.Services.SparkBitcoinTx.<Clone>$() -> NSpark.Services.SparkBitcoinTx!
+NSpark.Services.SparkBitcoinTx.Deconstruct(out byte[]! Tx, out byte[]! Sighash) -> void
+NSpark.Services.SparkBitcoinTx.Equals(NSpark.Services.SparkBitcoinTx? other) -> bool
+NSpark.Services.SparkBitcoinTx.Sighash.get -> byte[]!
+NSpark.Services.SparkBitcoinTx.Sighash.init -> void
+NSpark.Services.SparkBitcoinTx.SparkBitcoinTx(byte[]! Tx, byte[]! Sighash) -> void
+NSpark.Services.SparkBitcoinTx.Tx.get -> byte[]!
+NSpark.Services.SparkBitcoinTx.Tx.init -> void
+NSpark.Services.SparkNodeTxPair
+NSpark.Services.SparkNodeTxPair.<Clone>$() -> NSpark.Services.SparkNodeTxPair!
+NSpark.Services.SparkNodeTxPair.Cpfp.get -> NSpark.Services.SparkBitcoinTx!
+NSpark.Services.SparkNodeTxPair.Cpfp.init -> void
+NSpark.Services.SparkNodeTxPair.Deconstruct(out NSpark.Services.SparkBitcoinTx! Cpfp, out NSpark.Services.SparkBitcoinTx! Direct) -> void
+NSpark.Services.SparkNodeTxPair.Direct.get -> NSpark.Services.SparkBitcoinTx!
+NSpark.Services.SparkNodeTxPair.Direct.init -> void
+NSpark.Services.SparkNodeTxPair.Equals(NSpark.Services.SparkNodeTxPair? other) -> bool
+NSpark.Services.SparkNodeTxPair.SparkNodeTxPair(NSpark.Services.SparkBitcoinTx! Cpfp, NSpark.Services.SparkBitcoinTx! Direct) -> void
+NSpark.Services.SparkRefundTxTrio
+NSpark.Services.SparkRefundTxTrio.<Clone>$() -> NSpark.Services.SparkRefundTxTrio!
+NSpark.Services.SparkRefundTxTrio.CpfpRefund.get -> NSpark.Services.SparkBitcoinTx!
+NSpark.Services.SparkRefundTxTrio.CpfpRefund.init -> void
+NSpark.Services.SparkRefundTxTrio.Deconstruct(out NSpark.Services.SparkBitcoinTx! CpfpRefund, out NSpark.Services.SparkBitcoinTx? DirectRefund, out NSpark.Services.SparkBitcoinTx! DirectFromCpfpRefund) -> void
+NSpark.Services.SparkRefundTxTrio.DirectFromCpfpRefund.get -> NSpark.Services.SparkBitcoinTx!
+NSpark.Services.SparkRefundTxTrio.DirectFromCpfpRefund.init -> void
+NSpark.Services.SparkRefundTxTrio.DirectRefund.get -> NSpark.Services.SparkBitcoinTx?
+NSpark.Services.SparkRefundTxTrio.DirectRefund.init -> void
+NSpark.Services.SparkRefundTxTrio.Equals(NSpark.Services.SparkRefundTxTrio? other) -> bool
+NSpark.Services.SparkRefundTxTrio.SparkRefundTxTrio(NSpark.Services.SparkBitcoinTx! CpfpRefund, NSpark.Services.SparkBitcoinTx? DirectRefund, NSpark.Services.SparkBitcoinTx! DirectFromCpfpRefund) -> void
+NSpark.Services.SparkTxBuilder
 NSpark.Services.SwapService
 NSpark.Services.TokenIdentifier
 NSpark.Services.TokenService
 NSpark.Services.TransferService
 NSpark.Services.WithdrawalService
+NSpark.Signer.AdaptorKeyHandle
+NSpark.Signer.AdaptorKeyHandle.<Clone>$() -> NSpark.Signer.AdaptorKeyHandle!
+NSpark.Signer.AdaptorKeyHandle.AdaptorKeyHandle(byte[]! PublicKey, byte[]! Handle) -> void
+NSpark.Signer.AdaptorKeyHandle.Deconstruct(out byte[]! PublicKey, out byte[]! Handle) -> void
+NSpark.Signer.AdaptorKeyHandle.Equals(NSpark.Signer.AdaptorKeyHandle? other) -> bool
+NSpark.Signer.AdaptorKeyHandle.Handle.get -> byte[]!
+NSpark.Signer.AdaptorKeyHandle.Handle.init -> void
+NSpark.Signer.AdaptorKeyHandle.PublicKey.get -> byte[]!
+NSpark.Signer.AdaptorKeyHandle.PublicKey.init -> void
+NSpark.Signer.ClaimTweakLeafDescriptor
+NSpark.Signer.ClaimTweakLeafDescriptor.<Clone>$() -> NSpark.Signer.ClaimTweakLeafDescriptor!
+NSpark.Signer.ClaimTweakLeafDescriptor.ClaimTweakLeafDescriptor(string! LeafId, byte[]! SenderSecretCipher) -> void
+NSpark.Signer.ClaimTweakLeafDescriptor.Deconstruct(out string! LeafId, out byte[]! SenderSecretCipher) -> void
+NSpark.Signer.ClaimTweakLeafDescriptor.Equals(NSpark.Signer.ClaimTweakLeafDescriptor? other) -> bool
+NSpark.Signer.ClaimTweakLeafDescriptor.LeafId.get -> string!
+NSpark.Signer.ClaimTweakLeafDescriptor.LeafId.init -> void
+NSpark.Signer.ClaimTweakLeafDescriptor.SenderSecretCipher.get -> byte[]!
+NSpark.Signer.ClaimTweakLeafDescriptor.SenderSecretCipher.init -> void
+NSpark.Signer.EncryptedClaimTweakBatch
+NSpark.Signer.EncryptedClaimTweakBatch.<Clone>$() -> NSpark.Signer.EncryptedClaimTweakBatch!
+NSpark.Signer.EncryptedClaimTweakBatch.Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! NewPublicKeyByLeafId, out System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedPackageBySoId) -> void
+NSpark.Signer.EncryptedClaimTweakBatch.EncryptedClaimTweakBatch(System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! NewPublicKeyByLeafId, System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedPackageBySoId) -> void
+NSpark.Signer.EncryptedClaimTweakBatch.EncryptedPackageBySoId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>!
+NSpark.Signer.EncryptedClaimTweakBatch.EncryptedPackageBySoId.init -> void
+NSpark.Signer.EncryptedClaimTweakBatch.Equals(NSpark.Signer.EncryptedClaimTweakBatch? other) -> bool
+NSpark.Signer.EncryptedClaimTweakBatch.NewPublicKeyByLeafId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>!
+NSpark.Signer.EncryptedClaimTweakBatch.NewPublicKeyByLeafId.init -> void
+NSpark.Signer.EncryptedPreimageShareBundle
+NSpark.Signer.EncryptedPreimageShareBundle.<Clone>$() -> NSpark.Signer.EncryptedPreimageShareBundle!
+NSpark.Signer.EncryptedPreimageShareBundle.Deconstruct(out byte[]! PaymentHash, out System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedShareBySoId) -> void
+NSpark.Signer.EncryptedPreimageShareBundle.EncryptedPreimageShareBundle(byte[]! PaymentHash, System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedShareBySoId) -> void
+NSpark.Signer.EncryptedPreimageShareBundle.EncryptedShareBySoId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>!
+NSpark.Signer.EncryptedPreimageShareBundle.EncryptedShareBySoId.init -> void
+NSpark.Signer.EncryptedPreimageShareBundle.Equals(NSpark.Signer.EncryptedPreimageShareBundle? other) -> bool
+NSpark.Signer.EncryptedPreimageShareBundle.PaymentHash.get -> byte[]!
+NSpark.Signer.EncryptedPreimageShareBundle.PaymentHash.init -> void
+NSpark.Signer.EncryptedSendTweakBatch
+NSpark.Signer.EncryptedSendTweakBatch.<Clone>$() -> NSpark.Signer.EncryptedSendTweakBatch!
+NSpark.Signer.EncryptedSendTweakBatch.Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedPackageBySoId) -> void
+NSpark.Signer.EncryptedSendTweakBatch.EncryptedPackageBySoId.get -> System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>!
+NSpark.Signer.EncryptedSendTweakBatch.EncryptedPackageBySoId.init -> void
+NSpark.Signer.EncryptedSendTweakBatch.EncryptedSendTweakBatch(System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! EncryptedPackageBySoId) -> void
+NSpark.Signer.EncryptedSendTweakBatch.Equals(NSpark.Signer.EncryptedSendTweakBatch? other) -> bool
+NSpark.Signer.FrostAggregator
 NSpark.Signer.ISparkSigner
-NSpark.Signer.ISparkSigner.DepositPublicKey.get -> byte[]!
-NSpark.Signer.ISparkSigner.DeriveLeafSigningKey(string! leafId) -> byte[]!
-NSpark.Signer.ISparkSigner.DeriveStaticDepositKey(int index) -> byte[]!
-NSpark.Signer.ISparkSigner.FrostSign(byte[]! message, byte[]! signingKey, byte[]! groupKey, byte[]! commitmentSeed) -> byte[]!
-NSpark.Signer.ISparkSigner.GenerateFrostCommitments(byte[]! signingKey) -> (byte[]! hiding, byte[]! binding)
-NSpark.Signer.ISparkSigner.GeneratePreimage(string! transferId) -> byte[]!
-NSpark.Signer.ISparkSigner.IdentityPrivateKey.get -> byte[]!
-NSpark.Signer.ISparkSigner.IdentityPublicKey.get -> byte[]!
-NSpark.Signer.ISparkSigner.SignCompactWithIdentityKey(byte[]! messageHash) -> byte[]!
-NSpark.Signer.ISparkSigner.SignWithIdentityKey(byte[]! messageHash) -> byte[]!
+NSpark.Signer.ISparkSigner.BuildEncryptedClaimTweaksAsync(System.Collections.Generic.IReadOnlyList<NSpark.Signer.ClaimTweakLeafDescriptor!>! leaves, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedClaimTweakBatch!>!
+NSpark.Signer.ISparkSigner.BuildEncryptedPreimageSharesAsync(string! transferId, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedPreimageShareBundle!>!
+NSpark.Signer.ISparkSigner.BuildEncryptedSendTweaksAsync(System.Collections.Generic.IReadOnlyList<NSpark.Signer.SendTweakLeafDescriptor!>! leaves, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, string! transferId, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedSendTweakBatch!>!
+NSpark.Signer.ISparkSigner.DecryptEciesWithIdentityKeyAsync(byte[]! ciphertext, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.ExportStaticDepositPrivateKeyAsync(int index = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.GenerateAdaptorKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.AdaptorKeyHandle!>!
+NSpark.Signer.ISparkSigner.GenerateLeafFrostNonceAsync(string! leafId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostNonceCommitment!>!
+NSpark.Signer.ISparkSigner.GenerateStaticDepositFrostNonceAsync(int index, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostNonceCommitment!>!
+NSpark.Signer.ISparkSigner.GetDepositPublicKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.GetIdentityPublicKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.GetLeafPublicKeyAsync(string! leafId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.GetStaticDepositPublicKeyAsync(int index = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.SignCompactWithIdentityKeyAsync(byte[]! messageHash, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.SignLeafFrostAsync(string! leafId, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, byte[]? adaptorPublicKey = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostSignature!>!
+NSpark.Signer.ISparkSigner.SignLeafFrostWithNonceAsync(string! leafId, byte[]! nonceHandle, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, byte[]? adaptorPublicKey = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.SignStaticDepositFrostWithNonceAsync(int index, byte[]! nonceHandle, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.ISparkSigner.SignWithIdentityKeyAsync(byte[]! messageHash, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
 NSpark.Signer.KeyDerivation
 NSpark.Signer.KeyDerivation.ComputePreimage(string! transferId) -> byte[]!
 NSpark.Signer.KeyDerivation.DepositKey.get -> NBitcoin.ExtKey!
@@ -370,17 +446,75 @@ NSpark.Signer.KeyDerivation.HtlcPreimageKey.get -> NBitcoin.ExtKey!
 NSpark.Signer.KeyDerivation.IdentityKey.get -> NBitcoin.ExtKey!
 NSpark.Signer.KeyDerivation.SigningKey.get -> NBitcoin.ExtKey!
 NSpark.Signer.KeyDerivation.StaticDepositKey.get -> NBitcoin.ExtKey!
+NSpark.Signer.LeafFrostNonceCommitment
+NSpark.Signer.LeafFrostNonceCommitment.<Clone>$() -> NSpark.Signer.LeafFrostNonceCommitment!
+NSpark.Signer.LeafFrostNonceCommitment.Commitment.get -> NSpark.Signer.SigningCommitment!
+NSpark.Signer.LeafFrostNonceCommitment.Commitment.init -> void
+NSpark.Signer.LeafFrostNonceCommitment.Deconstruct(out byte[]! PublicKey, out NSpark.Signer.SigningCommitment! Commitment, out byte[]! NonceHandle) -> void
+NSpark.Signer.LeafFrostNonceCommitment.Equals(NSpark.Signer.LeafFrostNonceCommitment? other) -> bool
+NSpark.Signer.LeafFrostNonceCommitment.LeafFrostNonceCommitment(byte[]! PublicKey, NSpark.Signer.SigningCommitment! Commitment, byte[]! NonceHandle) -> void
+NSpark.Signer.LeafFrostNonceCommitment.NonceHandle.get -> byte[]!
+NSpark.Signer.LeafFrostNonceCommitment.NonceHandle.init -> void
+NSpark.Signer.LeafFrostNonceCommitment.PublicKey.get -> byte[]!
+NSpark.Signer.LeafFrostNonceCommitment.PublicKey.init -> void
+NSpark.Signer.LeafFrostSignature
+NSpark.Signer.LeafFrostSignature.<Clone>$() -> NSpark.Signer.LeafFrostSignature!
+NSpark.Signer.LeafFrostSignature.Commitment.get -> NSpark.Signer.SigningCommitment!
+NSpark.Signer.LeafFrostSignature.Commitment.init -> void
+NSpark.Signer.LeafFrostSignature.Deconstruct(out byte[]! PublicKey, out NSpark.Signer.SigningCommitment! Commitment, out byte[]! UserSignature) -> void
+NSpark.Signer.LeafFrostSignature.Equals(NSpark.Signer.LeafFrostSignature? other) -> bool
+NSpark.Signer.LeafFrostSignature.LeafFrostSignature(byte[]! PublicKey, NSpark.Signer.SigningCommitment! Commitment, byte[]! UserSignature) -> void
+NSpark.Signer.LeafFrostSignature.PublicKey.get -> byte[]!
+NSpark.Signer.LeafFrostSignature.PublicKey.init -> void
+NSpark.Signer.LeafFrostSignature.UserSignature.get -> byte[]!
+NSpark.Signer.LeafFrostSignature.UserSignature.init -> void
+NSpark.Signer.SendTweakLeafDescriptor
+NSpark.Signer.SendTweakLeafDescriptor.<Clone>$() -> NSpark.Signer.SendTweakLeafDescriptor!
+NSpark.Signer.SendTweakLeafDescriptor.Deconstruct(out string! LeafId, out byte[]! ReceiverPublicKey) -> void
+NSpark.Signer.SendTweakLeafDescriptor.Equals(NSpark.Signer.SendTweakLeafDescriptor? other) -> bool
+NSpark.Signer.SendTweakLeafDescriptor.LeafId.get -> string!
+NSpark.Signer.SendTweakLeafDescriptor.LeafId.init -> void
+NSpark.Signer.SendTweakLeafDescriptor.ReceiverPublicKey.get -> byte[]!
+NSpark.Signer.SendTweakLeafDescriptor.ReceiverPublicKey.init -> void
+NSpark.Signer.SendTweakLeafDescriptor.SendTweakLeafDescriptor(string! LeafId, byte[]! ReceiverPublicKey) -> void
+NSpark.Signer.SigningCommitment
+NSpark.Signer.SigningCommitment.<Clone>$() -> NSpark.Signer.SigningCommitment!
+NSpark.Signer.SigningCommitment.Binding.get -> byte[]!
+NSpark.Signer.SigningCommitment.Binding.init -> void
+NSpark.Signer.SigningCommitment.Deconstruct(out byte[]! Hiding, out byte[]! Binding) -> void
+NSpark.Signer.SigningCommitment.Equals(NSpark.Signer.SigningCommitment? other) -> bool
+NSpark.Signer.SigningCommitment.Hiding.get -> byte[]!
+NSpark.Signer.SigningCommitment.Hiding.init -> void
+NSpark.Signer.SigningCommitment.SigningCommitment(byte[]! Hiding, byte[]! Binding) -> void
+NSpark.Signer.SoTarget
+NSpark.Signer.SoTarget.<Clone>$() -> NSpark.Signer.SoTarget!
+NSpark.Signer.SoTarget.Deconstruct(out string! SoId, out uint ShareIndex, out byte[]! IdentityPublicKey) -> void
+NSpark.Signer.SoTarget.Equals(NSpark.Signer.SoTarget? other) -> bool
+NSpark.Signer.SoTarget.IdentityPublicKey.get -> byte[]!
+NSpark.Signer.SoTarget.IdentityPublicKey.init -> void
+NSpark.Signer.SoTarget.ShareIndex.get -> uint
+NSpark.Signer.SoTarget.ShareIndex.init -> void
+NSpark.Signer.SoTarget.SoId.get -> string!
+NSpark.Signer.SoTarget.SoId.init -> void
+NSpark.Signer.SoTarget.SoTarget(string! SoId, uint ShareIndex, byte[]! IdentityPublicKey) -> void
 NSpark.Signer.SparkSigner
-NSpark.Signer.SparkSigner.DepositPublicKey.get -> byte[]!
-NSpark.Signer.SparkSigner.DeriveLeafSigningKey(string! leafId) -> byte[]!
-NSpark.Signer.SparkSigner.DeriveStaticDepositKey(int index) -> byte[]!
-NSpark.Signer.SparkSigner.FrostSign(byte[]! message, byte[]! signingKey, byte[]! groupKey, byte[]! commitmentSeed) -> byte[]!
-NSpark.Signer.SparkSigner.GenerateFrostCommitments(byte[]! signingKey) -> (byte[]! hiding, byte[]! binding)
-NSpark.Signer.SparkSigner.GeneratePreimage(string! transferId) -> byte[]!
-NSpark.Signer.SparkSigner.IdentityPrivateKey.get -> byte[]!
-NSpark.Signer.SparkSigner.IdentityPublicKey.get -> byte[]!
-NSpark.Signer.SparkSigner.SignCompactWithIdentityKey(byte[]! messageHash) -> byte[]!
-NSpark.Signer.SparkSigner.SignWithIdentityKey(byte[]! messageHash) -> byte[]!
+NSpark.Signer.SparkSigner.BuildEncryptedClaimTweaksAsync(System.Collections.Generic.IReadOnlyList<NSpark.Signer.ClaimTweakLeafDescriptor!>! leaves, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedClaimTweakBatch!>!
+NSpark.Signer.SparkSigner.BuildEncryptedPreimageSharesAsync(string! transferId, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedPreimageShareBundle!>!
+NSpark.Signer.SparkSigner.BuildEncryptedSendTweaksAsync(System.Collections.Generic.IReadOnlyList<NSpark.Signer.SendTweakLeafDescriptor!>! leaves, System.Collections.Generic.IReadOnlyList<NSpark.Signer.SoTarget!>! soTargets, string! transferId, uint threshold, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.EncryptedSendTweakBatch!>!
+NSpark.Signer.SparkSigner.DecryptEciesWithIdentityKeyAsync(byte[]! ciphertext, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.ExportStaticDepositPrivateKeyAsync(int index = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.GenerateAdaptorKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.AdaptorKeyHandle!>!
+NSpark.Signer.SparkSigner.GenerateLeafFrostNonceAsync(string! leafId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostNonceCommitment!>!
+NSpark.Signer.SparkSigner.GenerateStaticDepositFrostNonceAsync(int index, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostNonceCommitment!>!
+NSpark.Signer.SparkSigner.GetDepositPublicKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.GetIdentityPublicKeyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.GetLeafPublicKeyAsync(string! leafId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.GetStaticDepositPublicKeyAsync(int index = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.SignCompactWithIdentityKeyAsync(byte[]! messageHash, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.SignLeafFrostAsync(string! leafId, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, byte[]? adaptorPublicKey = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Signer.LeafFrostSignature!>!
+NSpark.Signer.SparkSigner.SignLeafFrostWithNonceAsync(string! leafId, byte[]! nonceHandle, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, byte[]? adaptorPublicKey = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.SignStaticDepositFrostWithNonceAsync(int index, byte[]! nonceHandle, byte[]! message, byte[]! verifyingKey, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! soCommitments, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+NSpark.Signer.SparkSigner.SignWithIdentityKeyAsync(byte[]! messageHash, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
 NSpark.Signer.SparkSigner.SparkSigner(NSpark.Signer.KeyDerivation! keys) -> void
 NSpark.SigningOperatorConfig
 NSpark.SigningOperatorConfig.<Clone>$() -> NSpark.SigningOperatorConfig!
@@ -394,8 +528,8 @@ NSpark.SigningOperatorConfig.IdentityPublicKeyHex.get -> string!
 NSpark.SigningOperatorConfig.IdentityPublicKeyHex.init -> void
 NSpark.SigningOperatorConfig.SigningOperatorConfig(string! Address, string! Identifier, string! IdentityPublicKeyHex) -> void
 NSpark.SparkConnection
-NSpark.SparkConnection.CreateWallet(NSpark.Signer.ISparkSigner! signer) -> NSpark.SparkWallet!
-NSpark.SparkConnection.CreateWallet(string! mnemonic, int? account = null, string? passphrase = null) -> NSpark.SparkWallet!
+NSpark.SparkConnection.CreateWalletAsync(NSpark.Signer.ISparkSigner! signer, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.SparkWallet!>!
+NSpark.SparkConnection.CreateWalletAsync(string! mnemonic, int? account = null, string? passphrase = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.SparkWallet!>!
 NSpark.SparkConnection.Dispose() -> void
 NSpark.SparkConnection.DisposeAsync() -> System.Threading.Tasks.ValueTask
 NSpark.SparkConnection.Options.get -> NSpark.SparkOptions!
@@ -416,7 +550,9 @@ NSpark.SparkOptions.SspIdentityPublicKeyHex.set -> void
 NSpark.SparkOptions.SspUrl.get -> string!
 NSpark.SparkOptions.SspUrl.set -> void
 NSpark.SparkWallet
+NSpark.SparkWallet.DepositPublicKey.get -> byte[]!
 NSpark.SparkWallet.GetSparkAddress() -> string!
+NSpark.SparkWallet.IdentityPublicKey.get -> byte[]!
 NSpark.SparkWallet.IdentityPublicKeyHex.get -> string!
 abstract NSpark.Models.SparkEvent.<Clone>$() -> NSpark.Models.SparkEvent!
 const NSpark.Connection.SparkResiliencePolicies.DefaultMaxRetries = 3 -> int
@@ -468,6 +604,9 @@ override NSpark.Models.FeeQuote.ToString() -> string!
 override NSpark.Models.LightningInvoice.Equals(object? obj) -> bool
 override NSpark.Models.LightningInvoice.GetHashCode() -> int
 override NSpark.Models.LightningInvoice.ToString() -> string!
+override NSpark.Models.LightningSendStatus.Equals(object? obj) -> bool
+override NSpark.Models.LightningSendStatus.GetHashCode() -> int
+override NSpark.Models.LightningSendStatus.ToString() -> string!
 override NSpark.Models.SatsBalance.Equals(object? obj) -> bool
 override NSpark.Models.SatsBalance.GetHashCode() -> int
 override NSpark.Models.SatsBalance.ToString() -> string!
@@ -514,6 +653,45 @@ override NSpark.Models.WalletBalance.ToString() -> string!
 override NSpark.Models.WalletSettings.Equals(object? obj) -> bool
 override NSpark.Models.WalletSettings.GetHashCode() -> int
 override NSpark.Models.WalletSettings.ToString() -> string!
+override NSpark.Services.SparkBitcoinTx.Equals(object? obj) -> bool
+override NSpark.Services.SparkBitcoinTx.GetHashCode() -> int
+override NSpark.Services.SparkBitcoinTx.ToString() -> string!
+override NSpark.Services.SparkNodeTxPair.Equals(object? obj) -> bool
+override NSpark.Services.SparkNodeTxPair.GetHashCode() -> int
+override NSpark.Services.SparkNodeTxPair.ToString() -> string!
+override NSpark.Services.SparkRefundTxTrio.Equals(object? obj) -> bool
+override NSpark.Services.SparkRefundTxTrio.GetHashCode() -> int
+override NSpark.Services.SparkRefundTxTrio.ToString() -> string!
+override NSpark.Signer.AdaptorKeyHandle.Equals(object? obj) -> bool
+override NSpark.Signer.AdaptorKeyHandle.GetHashCode() -> int
+override NSpark.Signer.AdaptorKeyHandle.ToString() -> string!
+override NSpark.Signer.ClaimTweakLeafDescriptor.Equals(object? obj) -> bool
+override NSpark.Signer.ClaimTweakLeafDescriptor.GetHashCode() -> int
+override NSpark.Signer.ClaimTweakLeafDescriptor.ToString() -> string!
+override NSpark.Signer.EncryptedClaimTweakBatch.Equals(object? obj) -> bool
+override NSpark.Signer.EncryptedClaimTweakBatch.GetHashCode() -> int
+override NSpark.Signer.EncryptedClaimTweakBatch.ToString() -> string!
+override NSpark.Signer.EncryptedPreimageShareBundle.Equals(object? obj) -> bool
+override NSpark.Signer.EncryptedPreimageShareBundle.GetHashCode() -> int
+override NSpark.Signer.EncryptedPreimageShareBundle.ToString() -> string!
+override NSpark.Signer.EncryptedSendTweakBatch.Equals(object? obj) -> bool
+override NSpark.Signer.EncryptedSendTweakBatch.GetHashCode() -> int
+override NSpark.Signer.EncryptedSendTweakBatch.ToString() -> string!
+override NSpark.Signer.LeafFrostNonceCommitment.Equals(object? obj) -> bool
+override NSpark.Signer.LeafFrostNonceCommitment.GetHashCode() -> int
+override NSpark.Signer.LeafFrostNonceCommitment.ToString() -> string!
+override NSpark.Signer.LeafFrostSignature.Equals(object? obj) -> bool
+override NSpark.Signer.LeafFrostSignature.GetHashCode() -> int
+override NSpark.Signer.LeafFrostSignature.ToString() -> string!
+override NSpark.Signer.SendTweakLeafDescriptor.Equals(object? obj) -> bool
+override NSpark.Signer.SendTweakLeafDescriptor.GetHashCode() -> int
+override NSpark.Signer.SendTweakLeafDescriptor.ToString() -> string!
+override NSpark.Signer.SigningCommitment.Equals(object? obj) -> bool
+override NSpark.Signer.SigningCommitment.GetHashCode() -> int
+override NSpark.Signer.SigningCommitment.ToString() -> string!
+override NSpark.Signer.SoTarget.Equals(object? obj) -> bool
+override NSpark.Signer.SoTarget.GetHashCode() -> int
+override NSpark.Signer.SoTarget.ToString() -> string!
 override NSpark.SigningOperatorConfig.Equals(object? obj) -> bool
 override NSpark.SigningOperatorConfig.GetHashCode() -> int
 override NSpark.SigningOperatorConfig.ToString() -> string!
@@ -543,6 +721,8 @@ static NSpark.Models.FeeQuote.operator !=(NSpark.Models.FeeQuote? left, NSpark.M
 static NSpark.Models.FeeQuote.operator ==(NSpark.Models.FeeQuote? left, NSpark.Models.FeeQuote? right) -> bool
 static NSpark.Models.LightningInvoice.operator !=(NSpark.Models.LightningInvoice? left, NSpark.Models.LightningInvoice? right) -> bool
 static NSpark.Models.LightningInvoice.operator ==(NSpark.Models.LightningInvoice? left, NSpark.Models.LightningInvoice? right) -> bool
+static NSpark.Models.LightningSendStatus.operator !=(NSpark.Models.LightningSendStatus? left, NSpark.Models.LightningSendStatus? right) -> bool
+static NSpark.Models.LightningSendStatus.operator ==(NSpark.Models.LightningSendStatus? left, NSpark.Models.LightningSendStatus? right) -> bool
 static NSpark.Models.SatsBalance.operator !=(NSpark.Models.SatsBalance? left, NSpark.Models.SatsBalance? right) -> bool
 static NSpark.Models.SatsBalance.operator ==(NSpark.Models.SatsBalance? left, NSpark.Models.SatsBalance? right) -> bool
 static NSpark.Models.SparkEvent.operator !=(NSpark.Models.SparkEvent? left, NSpark.Models.SparkEvent? right) -> bool
@@ -599,6 +779,16 @@ static NSpark.Services.LightningService.PayLightningInvoiceAsync(this NSpark.Spa
 static NSpark.Services.PrivacyService.GetWalletSettingsAsync(this NSpark.SparkWallet! wallet, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.WalletSettings!>!
 static NSpark.Services.PrivacyService.SetPrivacyEnabledAsync(this NSpark.SparkWallet! wallet, bool enabled, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.WalletSettings!>!
 static NSpark.Services.SparkAddress.DecodeIdentityPublicKey(string! sparkAddress) -> byte[]!
+static NSpark.Services.SparkBitcoinTx.operator !=(NSpark.Services.SparkBitcoinTx? left, NSpark.Services.SparkBitcoinTx? right) -> bool
+static NSpark.Services.SparkBitcoinTx.operator ==(NSpark.Services.SparkBitcoinTx? left, NSpark.Services.SparkBitcoinTx? right) -> bool
+static NSpark.Services.SparkNodeTxPair.operator !=(NSpark.Services.SparkNodeTxPair? left, NSpark.Services.SparkNodeTxPair? right) -> bool
+static NSpark.Services.SparkNodeTxPair.operator ==(NSpark.Services.SparkNodeTxPair? left, NSpark.Services.SparkNodeTxPair? right) -> bool
+static NSpark.Services.SparkRefundTxTrio.operator !=(NSpark.Services.SparkRefundTxTrio? left, NSpark.Services.SparkRefundTxTrio? right) -> bool
+static NSpark.Services.SparkRefundTxTrio.operator ==(NSpark.Services.SparkRefundTxTrio? left, NSpark.Services.SparkRefundTxTrio? right) -> bool
+static NSpark.Services.SparkTxBuilder.BuildHtlcTransaction(byte[]! nodeTx, uint vout, uint sequence, byte[]! paymentHash, byte[]! hashlockPubkey, byte[]! seqlockPubkey, uint htlcSequence, bool applyFee, ulong feeSats, string! network) -> NSpark.Services.SparkBitcoinTx!
+static NSpark.Services.SparkTxBuilder.BuildNodeTxPair(byte[]! parentTx, uint vout, string! address, uint sequence, uint directSequence, ulong feeSats) -> NSpark.Services.SparkNodeTxPair!
+static NSpark.Services.SparkTxBuilder.BuildRefundTxTrio(byte[]! cpfpNodeTx, byte[]? directNodeTx, uint vout, byte[]! receivingPublicKey, string! network, uint sequence, uint directSequence, ulong feeSats) -> NSpark.Services.SparkRefundTxTrio!
+static NSpark.Services.SparkTxBuilder.ComputeMultiInputSighash(byte[]! tx, uint inputIndex, System.Collections.Generic.IReadOnlyList<byte[]!>! prevOutScripts, System.Collections.Generic.IReadOnlyList<ulong>! prevOutValues) -> byte[]!
 static NSpark.Services.SwapService.RequestLeavesSwapAsync(this NSpark.SparkWallet! wallet, long[]! targetAmounts, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkLeaf!>!>!
 static NSpark.Services.SwapService.SelectLeavesWithSwapAsync(this NSpark.SparkWallet! wallet, long amountSats, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkLeaf!>!>!
 static NSpark.Services.TokenIdentifier.Decode(string! bech32mIdentifier, NSpark.SparkNetwork? expectedNetwork = null) -> (byte[]! RawIdentifier, NSpark.SparkNetwork Network)
@@ -617,8 +807,29 @@ static NSpark.Services.TransferService.GetTransfersAsync(this NSpark.SparkWallet
 static NSpark.Services.TransferService.SendAsync(this NSpark.SparkWallet! wallet, byte[]! receiverIdentityPublicKey, long amountSats, string? transferId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.SparkTransfer!>!
 static NSpark.Services.WithdrawalService.GetFeeQuoteAsync(this NSpark.SparkWallet! wallet, string![]! leafIds, string! onChainAddress, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.FeeQuote!>!
 static NSpark.Services.WithdrawalService.WithdrawAsync(this NSpark.SparkWallet! wallet, string! onChainAddress, long amountSats, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+static NSpark.Signer.AdaptorKeyHandle.operator !=(NSpark.Signer.AdaptorKeyHandle? left, NSpark.Signer.AdaptorKeyHandle? right) -> bool
+static NSpark.Signer.AdaptorKeyHandle.operator ==(NSpark.Signer.AdaptorKeyHandle? left, NSpark.Signer.AdaptorKeyHandle? right) -> bool
+static NSpark.Signer.ClaimTweakLeafDescriptor.operator !=(NSpark.Signer.ClaimTweakLeafDescriptor? left, NSpark.Signer.ClaimTweakLeafDescriptor? right) -> bool
+static NSpark.Signer.ClaimTweakLeafDescriptor.operator ==(NSpark.Signer.ClaimTweakLeafDescriptor? left, NSpark.Signer.ClaimTweakLeafDescriptor? right) -> bool
+static NSpark.Signer.EncryptedClaimTweakBatch.operator !=(NSpark.Signer.EncryptedClaimTweakBatch? left, NSpark.Signer.EncryptedClaimTweakBatch? right) -> bool
+static NSpark.Signer.EncryptedClaimTweakBatch.operator ==(NSpark.Signer.EncryptedClaimTweakBatch? left, NSpark.Signer.EncryptedClaimTweakBatch? right) -> bool
+static NSpark.Signer.EncryptedPreimageShareBundle.operator !=(NSpark.Signer.EncryptedPreimageShareBundle? left, NSpark.Signer.EncryptedPreimageShareBundle? right) -> bool
+static NSpark.Signer.EncryptedPreimageShareBundle.operator ==(NSpark.Signer.EncryptedPreimageShareBundle? left, NSpark.Signer.EncryptedPreimageShareBundle? right) -> bool
+static NSpark.Signer.EncryptedSendTweakBatch.operator !=(NSpark.Signer.EncryptedSendTweakBatch? left, NSpark.Signer.EncryptedSendTweakBatch? right) -> bool
+static NSpark.Signer.EncryptedSendTweakBatch.operator ==(NSpark.Signer.EncryptedSendTweakBatch? left, NSpark.Signer.EncryptedSendTweakBatch? right) -> bool
+static NSpark.Signer.FrostAggregator.Aggregate(byte[]! message, System.Collections.Generic.IReadOnlyDictionary<string!, NSpark.Signer.SigningCommitment!>! statechainCommitments, NSpark.Signer.SigningCommitment! selfCommitment, System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! statechainSignatures, byte[]! selfSignature, System.Collections.Generic.IReadOnlyDictionary<string!, byte[]!>! statechainPublicKeys, byte[]! selfPublicKey, byte[]! verifyingKey, byte[]? adaptorPublicKey = null) -> byte[]!
 static NSpark.Signer.KeyDerivation.FromMnemonic(string! mnemonic, int account = 0, string? passphrase = null) -> NSpark.Signer.KeyDerivation!
 static NSpark.Signer.KeyDerivation.FromSeed(byte[]! seed, int account = 0) -> NSpark.Signer.KeyDerivation!
+static NSpark.Signer.LeafFrostNonceCommitment.operator !=(NSpark.Signer.LeafFrostNonceCommitment? left, NSpark.Signer.LeafFrostNonceCommitment? right) -> bool
+static NSpark.Signer.LeafFrostNonceCommitment.operator ==(NSpark.Signer.LeafFrostNonceCommitment? left, NSpark.Signer.LeafFrostNonceCommitment? right) -> bool
+static NSpark.Signer.LeafFrostSignature.operator !=(NSpark.Signer.LeafFrostSignature? left, NSpark.Signer.LeafFrostSignature? right) -> bool
+static NSpark.Signer.LeafFrostSignature.operator ==(NSpark.Signer.LeafFrostSignature? left, NSpark.Signer.LeafFrostSignature? right) -> bool
+static NSpark.Signer.SendTweakLeafDescriptor.operator !=(NSpark.Signer.SendTweakLeafDescriptor? left, NSpark.Signer.SendTweakLeafDescriptor? right) -> bool
+static NSpark.Signer.SendTweakLeafDescriptor.operator ==(NSpark.Signer.SendTweakLeafDescriptor? left, NSpark.Signer.SendTweakLeafDescriptor? right) -> bool
+static NSpark.Signer.SigningCommitment.operator !=(NSpark.Signer.SigningCommitment? left, NSpark.Signer.SigningCommitment? right) -> bool
+static NSpark.Signer.SigningCommitment.operator ==(NSpark.Signer.SigningCommitment? left, NSpark.Signer.SigningCommitment? right) -> bool
+static NSpark.Signer.SoTarget.operator !=(NSpark.Signer.SoTarget? left, NSpark.Signer.SoTarget? right) -> bool
+static NSpark.Signer.SoTarget.operator ==(NSpark.Signer.SoTarget? left, NSpark.Signer.SoTarget? right) -> bool
 static NSpark.Signer.SparkSigner.FromMnemonic(string! mnemonic, int account = 0, string? passphrase = null) -> NSpark.Signer.SparkSigner!
 static NSpark.SigningOperatorConfig.operator !=(NSpark.SigningOperatorConfig? left, NSpark.SigningOperatorConfig? right) -> bool
 static NSpark.SigningOperatorConfig.operator ==(NSpark.SigningOperatorConfig? left, NSpark.SigningOperatorConfig? right) -> bool

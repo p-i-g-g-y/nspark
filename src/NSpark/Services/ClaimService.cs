@@ -1,7 +1,6 @@
 using Google.Protobuf;
 using NSpark.Models;
 using NSpark.Proto;
-using NSpark.Signer;
 
 namespace NSpark.Services;
 

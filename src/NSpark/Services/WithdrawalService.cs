@@ -3,7 +3,6 @@ using Google.Protobuf;
 using NSpark.GraphQL;
 using NSpark.Models;
 using NSpark.Proto;
-using NSpark.Signer;
 
 namespace NSpark.Services;
 

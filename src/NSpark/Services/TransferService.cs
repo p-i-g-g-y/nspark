@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Google.Protobuf;
 using NSpark.Models;
 using NSpark.Proto;

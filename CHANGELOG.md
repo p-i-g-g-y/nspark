@@ -10,6 +10,106 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] - 2026-05-26
+
+### Breaking — full remote-signing refactor
+
+`ISparkSigner` is now fully async and proto-aware. Every cryptographic operation
+that touches private key material — ECDSA over the identity key, ECIES
+decryption, per-leaf FROST signing, tweak-share computation, deterministic
+Lightning preimages, static-deposit key access, swap-adaptor key generation —
+flows through this interface. Custom signer implementations targeting HSMs,
+KMS-backed services, or hardware wallets now only need to fulfil one contract;
+the rest of NSpark stays the same.
+
+No plaintext share material, no intermediate-key plaintext, and no tweak
+signature payload ever crosses the wallet's address space. The signer builds
+and ECIES-encrypts the per-SO `SendLeafKeyTweaks` / `ClaimLeafKeyTweaks` /
+`SecretShare` proto packages internally and returns only the encrypted blobs
+the wallet plugs into the gRPC request.
+
+### Added
+- `NSpark.Signer.FrostAggregator` — public, pure-public-key FROST signature
+  aggregation. Combines the user's partial signature with SO partial signatures
+  into the final aggregated FROST signature. Safe to call from any custom
+  signer implementation.
+- `NSpark.Services.SparkTxBuilder` — public Spark-protocol Bitcoin transaction
+  construction (`BuildRefundTxTrio`, `BuildHtlcTransaction`, `BuildNodeTxPair`,
+  `ComputeMultiInputSighash`). No private key material crosses this boundary.
+- `NSpark.Services.SparkBitcoinTx`, `SparkRefundTxTrio`, `SparkNodeTxPair` —
+  public records returned by `SparkTxBuilder`.
+- `NSpark.Signer` DTOs for the new signer surface: `SoTarget`,
+  `SendTweakLeafDescriptor`, `ClaimTweakLeafDescriptor`,
+  `EncryptedSendTweakBatch`, `EncryptedClaimTweakBatch`,
+  `EncryptedPreimageShareBundle`, `LeafFrostSignature`,
+  `LeafFrostNonceCommitment`, `SigningCommitment`, `AdaptorKeyHandle`.
+
+### Changed
+- **`SparkConnection.CreateWallet*` is now async** —
+  `CreateWalletAsync(string mnemonic, ...)` and
+  `CreateWalletAsync(ISparkSigner signer, ...)`. One round-trip to the signer
+  at construction time caches the identity + deposit public keys so
+  `wallet.IdentityPublicKey`, `IdentityPublicKeyHex`, `GetSparkAddress()`,
+  `DepositPublicKey` remain synchronous accessors.
+- **`ISparkSigner` is fully async** — every member returns `Task` /
+  `Task<TResult>` and takes `CancellationToken`. New surface:
+  `GetIdentityPublicKeyAsync`, `GetDepositPublicKeyAsync`,
+  `GetLeafPublicKeyAsync`, `GetStaticDepositPublicKeyAsync`,
+  `SignWithIdentityKeyAsync`, `SignCompactWithIdentityKeyAsync`,
+  `DecryptEciesWithIdentityKeyAsync`, `SignLeafFrostAsync`,
+  `GenerateLeafFrostNonceAsync` + `SignLeafFrostWithNonceAsync` (two-phase),
+  `BuildEncryptedSendTweaksAsync`, `BuildEncryptedClaimTweaksAsync`,
+  `BuildEncryptedPreimageSharesAsync`,
+  `GenerateStaticDepositFrostNonceAsync` +
+  `SignStaticDepositFrostWithNonceAsync` (two-phase),
+  `ExportStaticDepositPrivateKeyAsync`, `GenerateAdaptorKeyAsync`.
+- `SparkWallet` caches identity + deposit pubkeys; new `wallet.IdentityPublicKey`
+  and `wallet.DepositPublicKey` byte-array accessors replace the synchronous
+  `wallet.Signer.IdentityPublicKey` path.
+- `SparkAuthenticator` and `SspAuthenticator` are fully async against the signer.
+- Lightning invoice preimage generation is now deterministic via the signer
+  (`HMAC-SHA256(htlcPreimageKey, transferId)`), matching the existing
+  `docs/signer.md` contract. The preimage never crosses the wallet boundary
+  — only the public payment hash + per-SO encrypted shares do.
+- `TokenService` callers go through `SignWithIdentityKeyAsync`.
+
+### Removed
+- `ISparkSigner.IdentityPublicKey` (sync getter) — use
+  `wallet.IdentityPublicKey` or `await signer.GetIdentityPublicKeyAsync()`.
+- `ISparkSigner.IdentityPrivateKey` — replaced by
+  `DecryptEciesWithIdentityKeyAsync` (the only legitimate consumer).
+  Remote signers no longer need to expose the raw scalar.
+- `ISparkSigner.DepositPublicKey` (sync getter) — use
+  `wallet.DepositPublicKey` or `await signer.GetDepositPublicKeyAsync()`.
+- `ISparkSigner.DeriveLeafSigningKey` / `DeriveStaticDepositKey` — replaced
+  by the encrypted-batch builders and explicit `ExportStaticDepositPrivateKeyAsync`
+  (used only in `ClaimStaticDepositAsync`, where the protocol requires
+  revealing the key to the SSP).
+- `ISparkSigner.FrostSign` / `GenerateFrostCommitments` / `GeneratePreimage`
+  (old sync stubs) — superseded by the new async surface.
+- `SparkConnection.CreateWallet` (sync) — replaced by `CreateWalletAsync`.
+
+### Security
+- The wallet's address space no longer contains any raw VSS share material,
+  intermediate signing keys, ECIES-decrypted scalars, or random preimages.
+  Every operation that produces sensitive material does so inside the signer's
+  trust boundary and ECIES-encrypts before returning to the caller.
+- `uniffi.spark_frost` is now imported only by three files —
+  `Signer/SparkSigner.cs` (in-process default signer), `Signer/FrostAggregator.cs`
+  (public-only aggregation wrapper), and `Services/SparkTxBuilder.cs`
+  (public-only tx construction wrapper). Every service file is uniffi-free.
+- Architecture invariants enforced by file layout — a single `grep -rl "using uniffi"`
+  catches any regression in PR review.
+
+### Tests
+- 124 unit tests pass. 46 standard integration tests pass.
+- All three new encrypted-batch APIs verified end-to-end on mainnet via the
+  `[Explicit]` integration suite:
+  `BuildEncryptedSendTweaksAsync` (Transfer, Lightning send, Swap, delegated
+  Lightning, external Lightning address), `BuildEncryptedClaimTweaksAsync`
+  (Swap return, transfer-to-third-wallet claim), and
+  `BuildEncryptedPreimageSharesAsync` (Lightning invoice creation).
+
 ## [0.1.0-alpha.7] - 2026-05-18
 
 ### Fixed

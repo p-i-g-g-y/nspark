@@ -415,8 +415,15 @@ public sealed class SparkSigner : ISparkSigner
         }
         finally
         {
-            if (oldKey is not null) CryptographicOperations.ZeroMemory(oldKey);
-            if (newKey is not null) CryptographicOperations.ZeroMemory(newKey);
+            if (oldKey is not null)
+            {
+                CryptographicOperations.ZeroMemory(oldKey);
+            }
+
+            if (newKey is not null)
+            {
+                CryptographicOperations.ZeroMemory(newKey);
+            }
         }
     }
 

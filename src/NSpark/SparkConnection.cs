@@ -84,11 +84,13 @@ public sealed class SparkConnection : IDisposable, IAsyncDisposable
     /// Create a wallet instance from a BIP-39 mnemonic. The wallet caches the identity
     /// and deposit public keys via one round-trip to the signer at construction time.
     /// </summary>
+#pragma warning disable RS0026 // Optional parameters on parallel overloads — alpha API.
     public Task<SparkWallet> CreateWalletAsync(
         string mnemonic,
         int? account = null,
         string? passphrase = null,
         CancellationToken ct = default)
+#pragma warning restore RS0026
     {
         ArgumentException.ThrowIfNullOrEmpty(mnemonic);
         var effectiveAccount = account ?? (_options.Network == SparkNetwork.Regtest ? 0 : 1);
@@ -100,7 +102,9 @@ public sealed class SparkConnection : IDisposable, IAsyncDisposable
     /// Create a wallet instance from an existing signer. Performs one round-trip to the
     /// signer to fetch and cache the identity and deposit public keys.
     /// </summary>
+#pragma warning disable RS0026
     public async Task<SparkWallet> CreateWalletAsync(ISparkSigner signer, CancellationToken ct = default)
+#pragma warning restore RS0026
     {
         ArgumentNullException.ThrowIfNull(signer);
 

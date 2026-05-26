@@ -33,7 +33,7 @@ public interface ISparkSigner
     /// authentication with Signing Operators, the SSP, and as the wallet's Spark address
     /// payload.
     /// </summary>
-    Task<byte[]> GetIdentityPublicKeyAsync(CancellationToken ct = default);
+    public Task<byte[]> GetIdentityPublicKeyAsync(CancellationToken ct = default);
 
     /// <summary>
     /// ECDSA-sign a 32-byte message hash with the identity key, returning a DER-encoded
@@ -41,21 +41,21 @@ public interface ISparkSigner
     /// signatures (token mint/transfer, transfer package, claim package, static-deposit
     /// claim payload).
     /// </summary>
-    Task<byte[]> SignWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);
+    public Task<byte[]> SignWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);
 
     /// <summary>
     /// ECDSA-sign a 32-byte message hash with the identity key, returning a 64-byte
     /// compact <c>(r || s)</c> signature. Used for leaf key-tweak signatures in
     /// transfer / Lightning send / swap / withdrawal flows.
     /// </summary>
-    Task<byte[]> SignCompactWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);
+    public Task<byte[]> SignCompactWithIdentityKeyAsync(byte[] messageHash, CancellationToken ct = default);
 
     /// <summary>
     /// Decrypt an ECIES ciphertext addressed to the identity public key. Used when a
     /// Signing Operator returns intermediate signing-key material back to the receiver
     /// during the token claim flow.
     /// </summary>
-    Task<byte[]> DecryptEciesWithIdentityKeyAsync(byte[] ciphertext, CancellationToken ct = default);
+    public Task<byte[]> DecryptEciesWithIdentityKeyAsync(byte[] ciphertext, CancellationToken ct = default);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Deposit key (root of on-chain deposit tree)
@@ -65,7 +65,7 @@ public interface ISparkSigner
     /// Returns the deposit public key (33-byte compressed secp256k1) used as the
     /// user-side spending key for the FROST-shared deposit tree.
     /// </summary>
-    Task<byte[]> GetDepositPublicKeyAsync(CancellationToken ct = default);
+    public Task<byte[]> GetDepositPublicKeyAsync(CancellationToken ct = default);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Per-leaf signing
@@ -76,7 +76,7 @@ public interface ISparkSigner
     /// for <paramref name="leafId"/>. Implementations MUST be deterministic: the same
     /// <paramref name="leafId"/> always maps to the same public key.
     /// </summary>
-    Task<byte[]> GetLeafPublicKeyAsync(string leafId, CancellationToken ct = default);
+    public Task<byte[]> GetLeafPublicKeyAsync(string leafId, CancellationToken ct = default);
 
     /// <summary>
     /// Run a complete FROST signing round for a leaf in one call: generate the user's
@@ -89,7 +89,7 @@ public interface ISparkSigner
     /// <param name="soCommitments">SO public commitments keyed by operator identifier.</param>
     /// <param name="adaptorPublicKey">Optional adaptor public key for swap-style signing.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<LeafFrostSignature> SignLeafFrostAsync(
+    public Task<LeafFrostSignature> SignLeafFrostAsync(
         string leafId,
         byte[] message,
         byte[] verifyingKey,
@@ -104,7 +104,7 @@ public interface ISparkSigner
     /// is available. Used by flows (e.g., cooperative-exit withdrawal) where the
     /// commitments must be sent to SOs before the final sighash is known.
     /// </summary>
-    Task<LeafFrostNonceCommitment> GenerateLeafFrostNonceAsync(
+    public Task<LeafFrostNonceCommitment> GenerateLeafFrostNonceAsync(
         string leafId,
         CancellationToken ct = default);
 
@@ -113,7 +113,7 @@ public interface ISparkSigner
     /// nonce previously committed to by <see cref="GenerateLeafFrostNonceAsync"/>.
     /// The <paramref name="nonceHandle"/> MUST be the one returned from that call.
     /// </summary>
-    Task<byte[]> SignLeafFrostWithNonceAsync(
+    public Task<byte[]> SignLeafFrostWithNonceAsync(
         string leafId,
         byte[] nonceHandle,
         byte[] message,
@@ -141,7 +141,7 @@ public interface ISparkSigner
     /// <param name="transferId">Transfer ID — bound into the per-leaf tweak signature payload.</param>
     /// <param name="threshold">FROST threshold (minimum SO shares required to reconstruct the tweak).</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
+    public Task<EncryptedSendTweakBatch> BuildEncryptedSendTweaksAsync(
         IReadOnlyList<SendTweakLeafDescriptor> leaves,
         IReadOnlyList<SoTarget> soTargets,
         string transferId,
@@ -160,7 +160,7 @@ public interface ISparkSigner
     /// pubkey when constructing claim refund txs — no other plaintext key material leaves
     /// the signer.
     /// </remarks>
-    Task<EncryptedClaimTweakBatch> BuildEncryptedClaimTweaksAsync(
+    public Task<EncryptedClaimTweakBatch> BuildEncryptedClaimTweaksAsync(
         IReadOnlyList<ClaimTweakLeafDescriptor> leaves,
         IReadOnlyList<SoTarget> soTargets,
         uint threshold,
@@ -174,7 +174,7 @@ public interface ISparkSigner
     /// Returns the public key (33-byte compressed) for the static-deposit signing key
     /// at <paramref name="index"/>.
     /// </summary>
-    Task<byte[]> GetStaticDepositPublicKeyAsync(int index = 0, CancellationToken ct = default);
+    public Task<byte[]> GetStaticDepositPublicKeyAsync(int index = 0, CancellationToken ct = default);
 
     /// <summary>
     /// Export the raw static-deposit private key as a 32-byte big-endian scalar.
@@ -186,14 +186,14 @@ public interface ISparkSigner
     /// static-deposit claims will then be unavailable on those signers.
     /// </remarks>
     /// <exception cref="NotSupportedException">When the signer cannot export the key.</exception>
-    Task<byte[]> ExportStaticDepositPrivateKeyAsync(int index = 0, CancellationToken ct = default);
+    public Task<byte[]> ExportStaticDepositPrivateKeyAsync(int index = 0, CancellationToken ct = default);
 
     /// <summary>
     /// Two-phase FROST signing for the static-deposit refund flow — phase 1.
     /// Generates the user's nonce commitment and returns an opaque handle the caller
     /// must pass back to <see cref="SignStaticDepositFrostWithNonceAsync"/>.
     /// </summary>
-    Task<LeafFrostNonceCommitment> GenerateStaticDepositFrostNonceAsync(
+    public Task<LeafFrostNonceCommitment> GenerateStaticDepositFrostNonceAsync(
         int index,
         CancellationToken ct = default);
 
@@ -202,7 +202,7 @@ public interface ISparkSigner
     /// Signs <paramref name="message"/> using the nonce previously committed to by
     /// <see cref="GenerateStaticDepositFrostNonceAsync"/>.
     /// </summary>
-    Task<byte[]> SignStaticDepositFrostWithNonceAsync(
+    public Task<byte[]> SignStaticDepositFrostWithNonceAsync(
         int index,
         byte[] nonceHandle,
         byte[] message,
@@ -228,7 +228,7 @@ public interface ISparkSigner
     /// <paramref name="transferId"/> MUST produce the same payment hash so recovery
     /// is possible.
     /// </remarks>
-    Task<EncryptedPreimageShareBundle> BuildEncryptedPreimageSharesAsync(
+    public Task<EncryptedPreimageShareBundle> BuildEncryptedPreimageSharesAsync(
         string transferId,
         IReadOnlyList<SoTarget> soTargets,
         uint threshold,
@@ -243,5 +243,5 @@ public interface ISparkSigner
     /// only sees the public key; the private half is referenced via the opaque handle
     /// for any subsequent operation that needs it.
     /// </summary>
-    Task<AdaptorKeyHandle> GenerateAdaptorKeyAsync(CancellationToken ct = default);
+    public Task<AdaptorKeyHandle> GenerateAdaptorKeyAsync(CancellationToken ct = default);
 }
