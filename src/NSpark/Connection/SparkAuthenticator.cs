@@ -74,7 +74,8 @@ internal sealed class SparkAuthenticator
         ArgumentException.ThrowIfNullOrEmpty(soAddress);
         ArgumentNullException.ThrowIfNull(signer);
 
-        var cacheKey = MakeCacheKey(soAddress, signer);
+        var identityPubKey = await signer.GetIdentityPublicKeyAsync(ct).ConfigureAwait(false);
+        var cacheKey = MakeCacheKey(soAddress, identityPubKey);
 
         if (_cache.TryGetValue(cacheKey, out var cached) &&
             cached.ExpiresAt > DateTimeOffset.UtcNow + _refreshBuffer)
@@ -86,7 +87,7 @@ internal sealed class SparkAuthenticator
         }
 
         SparkMeter.AuthTokenCacheMisses.Add(1);
-        var fresh = await AuthenticateAsync(pool, soAddress, signer, ct).ConfigureAwait(false);
+        var fresh = await AuthenticateAsync(pool, soAddress, signer, identityPubKey, ct).ConfigureAwait(false);
 
         EvictIfFull();
         _cache[cacheKey] = fresh;
@@ -111,8 +112,8 @@ internal sealed class SparkAuthenticator
     /// </summary>
     public void ClearCache() => _cache.Clear();
 
-    private static string MakeCacheKey(string soAddress, ISparkSigner signer) =>
-        $"{soAddress}:{Convert.ToHexString(signer.IdentityPublicKey)}";
+    private static string MakeCacheKey(string soAddress, byte[] identityPubKey) =>
+        $"{soAddress}:{Convert.ToHexString(identityPubKey)}";
 
     private void EvictIfFull()
     {
@@ -135,6 +136,7 @@ internal sealed class SparkAuthenticator
         GrpcConnectionPool pool,
         string soAddress,
         ISparkSigner signer,
+        byte[] identityPubKey,
         CancellationToken ct)
     {
         using var activity = SparkActivitySource.Start(SparkActivitySource.Spans.SoAuthenticate);
@@ -149,14 +151,14 @@ internal sealed class SparkAuthenticator
             var challengeResponse = await authnClient.get_challengeAsync(
                 new GetChallengeRequest
                 {
-                    PublicKey = ByteString.CopyFrom(signer.IdentityPublicKey),
+                    PublicKey = ByteString.CopyFrom(identityPubKey),
                 },
                 cancellationToken: ct).ConfigureAwait(false);
 
             // Step 2: Sign the challenge.
             var challengeBytes = challengeResponse.ProtectedChallenge.Challenge.ToByteArray();
             var challengeHash = SHA256.HashData(challengeBytes);
-            var signature = signer.SignWithIdentityKey(challengeHash);
+            var signature = await signer.SignWithIdentityKeyAsync(challengeHash, ct).ConfigureAwait(false);
 
             // Step 3: Verify challenge and receive a session token.
             var verifyResponse = await authnClient.verify_challengeAsync(
@@ -164,7 +166,7 @@ internal sealed class SparkAuthenticator
                 {
                     ProtectedChallenge = challengeResponse.ProtectedChallenge,
                     Signature = ByteString.CopyFrom(signature),
-                    PublicKey = ByteString.CopyFrom(signer.IdentityPublicKey),
+                    PublicKey = ByteString.CopyFrom(identityPubKey),
                 },
                 cancellationToken: ct).ConfigureAwait(false);
 

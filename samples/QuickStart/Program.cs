@@ -35,7 +35,7 @@ var options = Options.Create(new SparkOptions
 using var http = new HttpClient();
 await using var spark = new SparkConnection(options, http, loggerFactory);
 
-var wallet = spark.CreateWallet(mnemonic);
+var wallet = await spark.CreateWalletAsync(mnemonic);
 Console.WriteLine($"Wallet identity: {wallet.IdentityPublicKeyHex}");
 Console.WriteLine($"Spark address:   {wallet.GetSparkAddress()}");
 Console.WriteLine();

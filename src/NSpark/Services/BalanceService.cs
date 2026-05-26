@@ -64,7 +64,7 @@ public static class BalanceService
         var nodesResponse = await client.query_nodesAsync(
             new QueryNodesRequest
             {
-                OwnerIdentityPubkey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                OwnerIdentityPubkey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = network,
             },
             headers,
@@ -106,7 +106,7 @@ public static class BalanceService
         var pendingTransfers = await client.query_pending_transfersAsync(
             new TransferFilter
             {
-                ReceiverIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                ReceiverIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = network,
             },
             headers,
@@ -161,7 +161,7 @@ public static class BalanceService
         var response = await client.query_nodesAsync(
             new QueryNodesRequest
             {
-                OwnerIdentityPubkey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                OwnerIdentityPubkey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = network,
             },
             headers,

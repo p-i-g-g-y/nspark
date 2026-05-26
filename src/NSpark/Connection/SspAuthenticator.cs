@@ -31,7 +31,8 @@ internal sealed class SspAuthenticator
         ISparkSigner signer,
         CancellationToken ct = default)
     {
-        var cacheKey = $"ssp:{Convert.ToHexString(signer.IdentityPublicKey)}";
+        var identityPubKey = await signer.GetIdentityPublicKeyAsync(ct).ConfigureAwait(false);
+        var cacheKey = $"ssp:{Convert.ToHexString(identityPubKey)}";
 
         if (s_tokenCache.TryGetValue(cacheKey, out var cached) &&
             cached.ExpiresAt > DateTimeOffset.UtcNow + TokenRefreshBuffer)
@@ -39,7 +40,7 @@ internal sealed class SspAuthenticator
             return cached.Token;
         }
 
-        var token = await AuthenticateAsync(httpClient, sspUrl, signer, ct).ConfigureAwait(false);
+        var token = await AuthenticateAsync(httpClient, sspUrl, signer, identityPubKey, ct).ConfigureAwait(false);
         s_tokenCache[cacheKey] = token;
         return token.Token;
     }
@@ -48,9 +49,10 @@ internal sealed class SspAuthenticator
         HttpClient httpClient,
         string sspUrl,
         ISparkSigner signer,
+        byte[] identityPubKey,
         CancellationToken ct)
     {
-        var identityPubKeyHex = Convert.ToHexString(signer.IdentityPublicKey).ToLowerInvariant();
+        var identityPubKeyHex = Convert.ToHexString(identityPubKey).ToLowerInvariant();
 
         // Step 1: Get challenge (no auth required)
         var challengeResponse = await ExecuteGraphQLAsync<GetChallengeResponse>(
@@ -62,7 +64,7 @@ internal sealed class SspAuthenticator
         // Step 2: Sign the challenge (SSP uses base64url encoding)
         var challengeBytes = DecodeBase64Url(protectedChallenge);
         var challengeHash = SHA256.HashData(challengeBytes);
-        var signature = signer.SignWithIdentityKey(challengeHash);
+        var signature = await signer.SignWithIdentityKeyAsync(challengeHash, ct).ConfigureAwait(false);
         var signatureBase64 = Convert.ToBase64String(signature);
 
         // Step 3: Verify challenge and get token

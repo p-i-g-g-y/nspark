@@ -19,7 +19,7 @@ public class WalletTests
     private SparkConnection _client = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
@@ -30,33 +30,33 @@ public class WalletTests
     public void Teardown() => _client?.Dispose();
 
     [Test]
-    public void ShouldInitializeWalletFromMnemonic()
+    public async Task ShouldInitializeWalletFromMnemonic()
     {
-        var wallet = _client.CreateWallet(MnemonicA);
+        var wallet = await _client.CreateWalletAsync(MnemonicA);
         Assert.That(wallet.IdentityPublicKeyHex, Is.Not.Empty);
     }
 
     [Test]
-    public void DifferentAccountsProduceDifferentKeys()
+    public async Task DifferentAccountsProduceDifferentKeys()
     {
-        var account0 = _client.CreateWallet(MnemonicA, account: 0);
-        var account1 = _client.CreateWallet(MnemonicA, account: 1);
+        var account0 = await _client.CreateWalletAsync(MnemonicA, account: 0);
+        var account1 = await _client.CreateWalletAsync(MnemonicA, account: 1);
         Assert.That(account0.IdentityPublicKeyHex, Is.Not.EqualTo(account1.IdentityPublicKeyHex));
     }
 
     [Test]
-    public void SameMnemonicProducesSameKey()
+    public async Task SameMnemonicProducesSameKey()
     {
-        var w1 = _client.CreateWallet(MnemonicA, account: 0);
-        var w2 = _client.CreateWallet(MnemonicA, account: 0);
+        var w1 = await _client.CreateWalletAsync(MnemonicA, account: 0);
+        var w2 = await _client.CreateWalletAsync(MnemonicA, account: 0);
         Assert.That(w1.IdentityPublicKeyHex, Is.EqualTo(w2.IdentityPublicKeyHex));
     }
 
     [Test]
-    public void DifferentMnemonicsProduceDifferentKeys()
+    public async Task DifferentMnemonicsProduceDifferentKeys()
     {
-        var wA = _client.CreateWallet(MnemonicA);
-        var wB = _client.CreateWallet(MnemonicB);
+        var wA = await _client.CreateWalletAsync(MnemonicA);
+        var wB = await _client.CreateWalletAsync(MnemonicB);
         Assert.That(wA.IdentityPublicKeyHex, Is.Not.EqualTo(wB.IdentityPublicKeyHex));
     }
 }
@@ -75,7 +75,7 @@ public class SparkAddressTests
     private SparkConnection _client = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
@@ -86,9 +86,9 @@ public class SparkAddressTests
     public void Teardown() => _client?.Dispose();
 
     [Test]
-    public void ShouldGenerateSparkAddressWithCorrectPrefix()
+    public async Task ShouldGenerateSparkAddressWithCorrectPrefix()
     {
-        var wallet = _client.CreateWallet(MnemonicA);
+        var wallet = await _client.CreateWalletAsync(MnemonicA);
         var address = wallet.GetSparkAddress();
 
         TestContext.Out.WriteLine($"Spark address: {address}");
@@ -97,18 +97,18 @@ public class SparkAddressTests
     }
 
     [Test]
-    public void SameWalletProducesSameSparkAddress()
+    public async Task SameWalletProducesSameSparkAddress()
     {
-        var w1 = _client.CreateWallet(MnemonicA);
-        var w2 = _client.CreateWallet(MnemonicA);
+        var w1 = await _client.CreateWalletAsync(MnemonicA);
+        var w2 = await _client.CreateWalletAsync(MnemonicA);
         Assert.That(w1.GetSparkAddress(), Is.EqualTo(w2.GetSparkAddress()));
     }
 
     [Test]
-    public void DifferentWalletsProduceDifferentSparkAddresses()
+    public async Task DifferentWalletsProduceDifferentSparkAddresses()
     {
-        var wA = _client.CreateWallet(MnemonicA);
-        var wB = _client.CreateWallet(MnemonicB);
+        var wA = await _client.CreateWalletAsync(MnemonicA);
+        var wB = await _client.CreateWalletAsync(MnemonicB);
         Assert.That(wA.GetSparkAddress(), Is.Not.EqualTo(wB.GetSparkAddress()));
     }
 }
@@ -128,12 +128,12 @@ public class BalanceTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -182,13 +182,13 @@ public class DepositTests
     private SparkWallet _walletB = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
     }
 
     [OneTimeTearDown]
@@ -293,13 +293,13 @@ public class LightningTests
     private SparkWallet _walletB = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
     }
 
     [OneTimeTearDown]
@@ -467,14 +467,14 @@ public class DelegatedInvoiceTests
     private SparkWallet _walletC = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
-        _walletC = _client.CreateWallet(MnemonicC);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
+        _walletC = await _client.CreateWalletAsync(MnemonicC);
     }
 
     [OneTimeTearDown]
@@ -498,7 +498,7 @@ public class DelegatedInvoiceTests
         TestContext.Out.WriteLine($"WalletC balance before: {balCBefore.SatsBalance.Available} sats");
 
         // Step 1: A creates invoice on behalf of C (server issues invoice for user C)
-        var cIdentityPubKey = _walletC.Signer.IdentityPublicKey;
+        var cIdentityPubKey = _walletC.IdentityPublicKey;
         var invoice = await _walletA.CreateLightningInvoiceAsync(
             amountSats: 10,
             memo: "delegated invoice for C",
@@ -561,7 +561,7 @@ public class DelegatedInvoiceTests
             TestContext.Out.WriteLine($"WalletC balance before: {balCBefore.SatsBalance.Available} sats");
 
             // A creates invoice on behalf of C
-            var cIdentityPubKey = _walletC.Signer.IdentityPublicKey;
+            var cIdentityPubKey = _walletC.IdentityPublicKey;
             var invoice = await _walletA.CreateLightningInvoiceAsync(
                 amountSats: 10,
                 memo: "delegated invoice for C (private)",
@@ -623,13 +623,13 @@ public class TransferTests
     private SparkWallet _walletB = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
     }
 
     [OneTimeTearDown]
@@ -753,7 +753,7 @@ public class TransferTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CurrentContext.CancellationToken);
         cts.CancelAfter(Timeout);
 
-        var walletC = _client.CreateWallet(MnemonicC);
+        var walletC = await _client.CreateWalletAsync(MnemonicC);
 
         var balanceA = await _walletA.GetBalanceAsync(cts.Token);
         if (balanceA.SatsBalance.Available < 100)
@@ -797,12 +797,12 @@ public class SwapTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -969,12 +969,12 @@ public class WithdrawalTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -1047,12 +1047,12 @@ public class StaticDepositTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -1127,12 +1127,12 @@ public class OnChainDepositTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -1174,12 +1174,12 @@ public class ThirdPartyInvoiceTests
     private SparkWallet _walletA = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -1191,7 +1191,7 @@ public class ThirdPartyInvoiceTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CurrentContext.CancellationToken);
         cts.CancelAfter(Timeout);
 
-        var walletC = _client.CreateWallet(MnemonicC);
+        var walletC = await _client.CreateWalletAsync(MnemonicC);
         var cPubKey = Convert.FromHexString(walletC.IdentityPublicKeyHex);
 
         var invoice = await _walletA.CreateLightningInvoiceAsync(
@@ -1232,7 +1232,7 @@ public class DebugTests
     private SparkConnection _client = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
@@ -1248,8 +1248,8 @@ public class DebugTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CurrentContext.CancellationToken);
         cts.CancelAfter(Timeout);
 
-        var walletA = _client.CreateWallet(MnemonicA);
-        var walletB = _client.CreateWallet(MnemonicB);
+        var walletA = await _client.CreateWalletAsync(MnemonicA);
+        var walletB = await _client.CreateWalletAsync(MnemonicB);
 
         var balA = await walletA.GetBalanceAsync(cts.Token);
         var balB = await walletB.GetBalanceAsync(cts.Token);
@@ -1281,12 +1281,12 @@ public class FundingTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -1362,13 +1362,13 @@ public class FullFlowTests
     private SparkWallet _walletB = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
     }
 
     [OneTimeTearDown]

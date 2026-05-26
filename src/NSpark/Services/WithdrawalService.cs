@@ -93,8 +93,6 @@ public static class WithdrawalService
         {
             var leaf = selectedLeaves[i];
             var node = leaf.Node;
-            var signingKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
-            var signingPubKey = SparkFrostMethods.GetPublicKeyBytes(signingKey, compressed: true);
             var verifyingKey = node.VerifyingPublicKey.ToByteArray();
 
             // Get current sequence and decrement
@@ -138,14 +136,13 @@ public static class WithdrawalService
             var directFromCpfpRefundWithConnector = AddInputToRawTx(
                 refundTrio.@directFromCpfpRefund.@tx, connectorInput);
 
-            // Generate FROST nonce commitments
-            var keyPackage = new KeyPackage(
-                secretKey: signingKey,
-                publicKey: signingPubKey,
-                verifyingKey: verifyingKey);
-            var cpfpNonce = SparkFrostMethods.FrostNonce(keyPackage);
-            var directNonce = SparkFrostMethods.FrostNonce(keyPackage);
-            var directFromCpfpNonce = SparkFrostMethods.FrostNonce(keyPackage);
+            // Generate three FROST nonce commitments via the signer (phase 1). The actual
+            // sighashes aren't known yet — the SO returns the final tx after combining the
+            // connector — so we commit to nonces now and sign later.
+            var cpfpNonce = await wallet.Signer.GenerateLeafFrostNonceAsync(leaf.Id, ct).ConfigureAwait(false);
+            var directNonce = await wallet.Signer.GenerateLeafFrostNonceAsync(leaf.Id, ct).ConfigureAwait(false);
+            var directFromCpfpNonce = await wallet.Signer.GenerateLeafFrostNonceAsync(leaf.Id, ct).ConfigureAwait(false);
+            var signingPubKey = cpfpNonce.PublicKey;
 
             // Build SigningJob for each refund tx (unsigned — just commitment)
             var cpfpSigningJob = new SigningJob
@@ -154,8 +151,8 @@ public static class WithdrawalService
                 RawTx = ByteString.CopyFrom(cpfpRefundWithConnector),
                 SigningNonceCommitment = new Proto.Common.SigningCommitment
                 {
-                    Hiding = ByteString.CopyFrom(cpfpNonce.@commitment.@hiding),
-                    Binding = ByteString.CopyFrom(cpfpNonce.@commitment.@binding),
+                    Hiding = ByteString.CopyFrom(cpfpNonce.Commitment.Hiding),
+                    Binding = ByteString.CopyFrom(cpfpNonce.Commitment.Binding),
                 },
             };
 
@@ -165,8 +162,8 @@ public static class WithdrawalService
                 RawTx = ByteString.CopyFrom(directFromCpfpRefundWithConnector),
                 SigningNonceCommitment = new Proto.Common.SigningCommitment
                 {
-                    Hiding = ByteString.CopyFrom(directFromCpfpNonce.@commitment.@hiding),
-                    Binding = ByteString.CopyFrom(directFromCpfpNonce.@commitment.@binding),
+                    Hiding = ByteString.CopyFrom(directFromCpfpNonce.Commitment.Hiding),
+                    Binding = ByteString.CopyFrom(directFromCpfpNonce.Commitment.Binding),
                 },
             };
 
@@ -185,15 +182,15 @@ public static class WithdrawalService
                     RawTx = ByteString.CopyFrom(directRefundWithConnector),
                     SigningNonceCommitment = new Proto.Common.SigningCommitment
                     {
-                        Hiding = ByteString.CopyFrom(directNonce.@commitment.@hiding),
-                        Binding = ByteString.CopyFrom(directNonce.@commitment.@binding),
+                        Hiding = ByteString.CopyFrom(directNonce.Commitment.Hiding),
+                        Binding = ByteString.CopyFrom(directNonce.Commitment.Binding),
                     },
                 };
             }
 
             signingJobs.Add(leafJob);
             leafDataList.Add(new LeafSigningData(
-                leaf.Id, signingKey, verifyingKey,
+                leaf.Id, signingPubKey, verifyingKey,
                 cpfpRefundWithConnector, directRefundWithConnector, directFromCpfpRefundWithConnector,
                 cpfpNonce, directNonce, directFromCpfpNonce,
                 cpfpNodeTx, directNodeTx, i));
@@ -206,7 +203,7 @@ public static class WithdrawalService
         var transferRequest = new StartTransferRequest
         {
             TransferId = transferId,
-            OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+            OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
             ReceiverIdentityPublicKey = ByteString.CopyFrom(receiverPubKey),
             ExpiryTime = expiryTime,
         };
@@ -232,6 +229,7 @@ public static class WithdrawalService
         {
             var leafData = leafDataList.First(d => d.LeafId == result.LeafId);
             var connectorPrevOut = ParseTxOutput(connectorTxBytes, (uint)leafData.ConnectorOutputIndex);
+            var signingPubKey = leafData.SigningPublicKey;
 
             // Sign CPFP refund (multi-input: node output + connector output)
             var cpfpNodeOutput = ParseTxOutput(leafData.CpfpNodeTx, 0);
@@ -241,11 +239,11 @@ public static class WithdrawalService
                 prevOutScripts: [cpfpNodeOutput.Script, connectorPrevOut.Script],
                 prevOutValues: [cpfpNodeOutput.Value, connectorPrevOut.Value]);
 
-            var cpfpAgg = FrostSigningHelper.SignAndAggregateFrost(
-                cpfpSighash, leafData.SigningKey, leafData.VerifyingKey,
-                leafData.CpfpNonce, result.RefundTxSigningResult);
+            var cpfpAgg = await SignAndAggregateAsync(
+                wallet.Signer, leafData.LeafId, leafData.CpfpNonce,
+                cpfpSighash, leafData.VerifyingKey,
+                result.RefundTxSigningResult, ct).ConfigureAwait(false);
 
-            var signingPubKey = SparkFrostMethods.GetPublicKeyBytes(leafData.SigningKey, compressed: true);
             cpfpSignatures.Add(new UserSignedTxSigningJob
             {
                 LeafId = result.LeafId,
@@ -265,9 +263,10 @@ public static class WithdrawalService
                     prevOutScripts: [directNodeOutput.Script, connectorPrevOut.Script],
                     prevOutValues: [directNodeOutput.Value, connectorPrevOut.Value]);
 
-                var directAgg = FrostSigningHelper.SignAndAggregateFrost(
-                    directSighash, leafData.SigningKey, leafData.VerifyingKey,
-                    leafData.DirectNonce, result.DirectRefundTxSigningResult);
+                var directAgg = await SignAndAggregateAsync(
+                    wallet.Signer, leafData.LeafId, leafData.DirectNonce,
+                    directSighash, leafData.VerifyingKey,
+                    result.DirectRefundTxSigningResult, ct).ConfigureAwait(false);
 
                 directSignatures.Add(new UserSignedTxSigningJob
                 {
@@ -285,9 +284,10 @@ public static class WithdrawalService
                 prevOutScripts: [cpfpNodeOutput.Script, connectorPrevOut.Script],
                 prevOutValues: [cpfpNodeOutput.Value, connectorPrevOut.Value]);
 
-            var dcfpAgg = FrostSigningHelper.SignAndAggregateFrost(
-                dcfpSighash, leafData.SigningKey, leafData.VerifyingKey,
-                leafData.DirectFromCpfpNonce, result.DirectFromCpfpRefundTxSigningResult);
+            var dcfpAgg = await SignAndAggregateAsync(
+                wallet.Signer, leafData.LeafId, leafData.DirectFromCpfpNonce,
+                dcfpSighash, leafData.VerifyingKey,
+                result.DirectFromCpfpRefundTxSigningResult, ct).ConfigureAwait(false);
 
             directFromCpfpSignatures.Add(new UserSignedTxSigningJob
             {
@@ -303,7 +303,7 @@ public static class WithdrawalService
             new Google.Protobuf.WellKnownTypes.Empty(), headers, cancellationToken: ct);
         var soOperators = soListResponse.SigningOperators;
         var soCount = (uint)soOperators.Count;
-        var threshold = Math.Max(2, (soCount + 2) / 2);
+        var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
 
         var perSoTweaks = new Dictionary<string, SendLeafKeyTweaks>();
         foreach (var (soId, _) in soOperators)
@@ -313,36 +313,34 @@ public static class WithdrawalService
 
         foreach (var leaf in selectedLeaves)
         {
-            var oldSigningKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
-            var newRandomKey = SparkFrostMethods.RandomSecretKeyBytes();
-            var keyTweak = ClaimService.SubtractPrivateKeys(oldSigningKey, newRandomKey);
-            var vssShares = SparkFrostMethods.SplitSecretWithProofsUniffi(
-                keyTweak, threshold: threshold, numShares: soCount);
-            var secretCipher = SparkFrostMethods.EncryptEcies(newRandomKey, receiverPubKey);
+            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
+                leaf.Id, receiverPubKey, threshold, soCount, ct).ConfigureAwait(false);
+            var secretCipher = tweak.SecretCipher;
 
             var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
             sigPayload = [.. sigPayload, .. secretCipher];
-            var tweakSig = wallet.Signer.SignCompactWithIdentityKey(SHA256.HashData(sigPayload));
+            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(
+                SHA256.HashData(sigPayload), ct).ConfigureAwait(false);
 
             var pubkeySharesTweak = new Dictionary<string, ByteString>();
             foreach (var (soId, soInfo) in soOperators)
             {
-                var matchedShare = vssShares.First(s => s.@index == soInfo.Index + 1);
+                var matchedShare = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
                 pubkeySharesTweak[soId] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.@share, compressed: true));
+                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
             }
 
             foreach (var (soId, soInfo) in soOperators)
             {
-                var share = vssShares.First(s => s.@index == soInfo.Index + 1);
+                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
                 var leafTweak = new SendLeafKeyTweak
                 {
                     LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.@share) },
+                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
                     SecretCipher = ByteString.CopyFrom(secretCipher),
                     Signature = ByteString.CopyFrom(tweakSig),
                 };
-                foreach (var proof in share.@proofs)
+                foreach (var proof in share.Proofs)
                 {
                     leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
                 }
@@ -396,7 +394,7 @@ public static class WithdrawalService
             .AddBytes(transferIdBytes)
             .AddMapStringToBytes(keyTweakPackage)
             .Hash();
-        var packageSignature = wallet.Signer.SignWithIdentityKey(packageHash);
+        var packageSignature = await wallet.Signer.SignWithIdentityKeyAsync(packageHash, ct).ConfigureAwait(false);
         transferPackage.UserSignature = ByteString.CopyFrom(packageSignature);
 
         // Step 7: Finalize transfer with transfer package
@@ -404,7 +402,7 @@ public static class WithdrawalService
             new FinalizeTransferWithTransferPackageRequest
             {
                 TransferId = exitResponse.Transfer.Id,
-                OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 TransferPackage = transferPackage,
             },
             headers,
@@ -426,17 +424,51 @@ public static class WithdrawalService
 
     private sealed record LeafSigningData(
         string LeafId,
-        byte[] SigningKey,
+        byte[] SigningPublicKey,
         byte[] VerifyingKey,
         byte[] CpfpRefundTx,
         byte[]? DirectRefundTx,
         byte[] DirectFromCpfpRefundTx,
-        NonceResult CpfpNonce,
-        NonceResult DirectNonce,
-        NonceResult DirectFromCpfpNonce,
+        NSpark.Signer.LeafFrostNonceCommitment CpfpNonce,
+        NSpark.Signer.LeafFrostNonceCommitment DirectNonce,
+        NSpark.Signer.LeafFrostNonceCommitment DirectFromCpfpNonce,
         byte[] CpfpNodeTx,
         byte[]? DirectNodeTx,
         int ConnectorOutputIndex);
+
+    /// <summary>
+    /// Phase 2 of withdrawal FROST signing: given a leaf's previously-issued nonce, the
+    /// recomputed sighash, and the SO's signing result, ask the signer to sign with the
+    /// nonce and then aggregate locally (aggregation is a pure-public-key op).
+    /// </summary>
+    private static async Task<byte[]> SignAndAggregateAsync(
+        NSpark.Signer.ISparkSigner signer,
+        string leafId,
+        NSpark.Signer.LeafFrostNonceCommitment nonce,
+        byte[] sighash,
+        byte[] verifyingKey,
+        SigningResult signingResult,
+        CancellationToken ct)
+    {
+        var soCommitments = new Dictionary<string, NSpark.Signer.SigningCommitment>();
+        foreach (var (soId, c) in signingResult.SigningNonceCommitments)
+        {
+            soCommitments[soId] = new NSpark.Signer.SigningCommitment(c.Hiding.ToByteArray(), c.Binding.ToByteArray());
+        }
+
+        var selfSignature = await signer.SignLeafFrostWithNonceAsync(
+            leafId, nonce.NonceHandle, sighash, verifyingKey, soCommitments, adaptorPublicKey: null, ct)
+            .ConfigureAwait(false);
+
+        return FrostSigningHelper.AggregateFrostSignature(
+            sighash: sighash,
+            selfCommitment: nonce.Commitment,
+            selfSignature: selfSignature,
+            selfPublicKey: nonce.PublicKey,
+            verifyingKey: verifyingKey,
+            signingResult: signingResult,
+            adaptorPublicKey: null);
+    }
 
     /// <summary>
     /// Compute txid from raw transaction bytes (double SHA-256 of witness-stripped serialization).

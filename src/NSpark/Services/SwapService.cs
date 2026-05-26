@@ -147,11 +147,11 @@ public static class SwapService
             new Google.Protobuf.WellKnownTypes.Empty(), headers, cancellationToken: ct);
         var soOperators = soListResponse.SigningOperators;
         var soCount = (uint)soOperators.Count;
-        var threshold = Math.Max(2, (soCount + 2) / 2);
+        var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
 
-        // Generate adaptor keypair
-        var adaptorPrivKey = SparkFrostMethods.RandomSecretKeyBytes();
-        var adaptorPubKey = SparkFrostMethods.GetPublicKeyBytes(adaptorPrivKey, compressed: true);
+        // Generate adaptor keypair via the signer — the adaptor private key never leaves the signer.
+        var adaptorKey = await wallet.Signer.GenerateAdaptorKeyAsync(ct).ConfigureAwait(false);
+        var adaptorPubKey = adaptorKey.PublicKey;
 
         var transferId = Guid.NewGuid().ToString();
         var expiryTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(
@@ -174,23 +174,20 @@ public static class SwapService
         }
 
         // Store signing info for FROST aggregation after SO response
-        var leafSigningInfos = new List<(string LeafId, uniffi.spark_frost.SigningCommitment SelfCommitment, byte[] Sighash)>();
+        var leafSigningInfos = new List<(string LeafId, NSpark.Signer.SigningCommitment SelfCommitment, byte[] Sighash)>();
 
         for (int i = 0; i < leaves.Count; i++)
         {
             var leaf = leaves[i];
             var node = leaf.Node;
-            var signingKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
             var verifyingKey = node.VerifyingPublicKey.ToByteArray();
 
             var cpfpCommitments = allCommitments[i].SigningNonceCommitments;
 
-            // Generate new random key, compute tweak
-            var newRandomKey = SparkFrostMethods.RandomSecretKeyBytes();
-            var keyTweak = ClaimService.SubtractPrivateKeys(signingKey, newRandomKey);
-            var vssShares = SparkFrostMethods.SplitSecretWithProofsUniffi(
-                keyTweak, threshold: threshold, numShares: soCount);
-            var secretCipher = SparkFrostMethods.EncryptEcies(newRandomKey, receiverPubKey);
+            // Tweak shares via the signer
+            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
+                leaf.Id, receiverPubKey, threshold, soCount, ct).ConfigureAwait(false);
+            var secretCipher = tweak.SecretCipher;
 
             // Compute sequences
             var refundTxBytes = node.RefundTx.Length > 0
@@ -219,39 +216,41 @@ public static class SwapService
                 feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Build signing job with adaptor key (only cpfp for swap)
-            var (job, selfCommitment, sighash) = FrostSigningHelper.BuildSigningJobWithAdaptor(
-                leaf.Id, signingKey, verifyingKey,
+            var (job, selfCommitment, sighash) = await FrostSigningHelper.BuildSigningJobWithAdaptorAsync(
+                wallet.Signer, leaf.Id, verifyingKey,
                 refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
-                cpfpCommitments, adaptorPubKey);
+                cpfpCommitments, adaptorPubKey, ct)
+                .ConfigureAwait(false);
             cpfpRefundJobs.Add(job);
             leafSigningInfos.Add((leaf.Id, selfCommitment, sighash));
 
             // Compact signature: SHA256(leaf_id || transfer_id || secret_cipher)
             var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
             sigPayload = [.. sigPayload, .. secretCipher];
-            var tweakSig = wallet.Signer.SignCompactWithIdentityKey(SHA256.HashData(sigPayload));
+            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(
+                SHA256.HashData(sigPayload), ct).ConfigureAwait(false);
 
             // Build pubkey shares tweak map
             var pubkeySharesTweak = new Dictionary<string, ByteString>();
             foreach (var (soId2, soInfo2) in soOperators)
             {
-                var matchedShare = vssShares.First(s => s.@index == soInfo2.Index + 1);
+                var matchedShare = tweak.Shares.First(s => s.Index == soInfo2.Index + 1);
                 pubkeySharesTweak[soId2] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.@share, compressed: true));
+                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
             }
 
             // Build per-SO key tweak entries
             foreach (var (soId, soInfo) in soOperators)
             {
-                var share = vssShares.First(s => s.@index == soInfo.Index + 1);
+                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
                 var leafTweak = new SendLeafKeyTweak
                 {
                     LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.@share) },
+                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
                     SecretCipher = ByteString.CopyFrom(secretCipher),
                     Signature = ByteString.CopyFrom(tweakSig),
                 };
-                foreach (var proof in share.@proofs)
+                foreach (var proof in share.Proofs)
                 {
                     leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
                 }
@@ -283,7 +282,7 @@ public static class SwapService
             .AddBytes(transferIdBytes)
             .AddMapStringToBytes(keyTweakPackage)
             .Hash();
-        var packageSignature = wallet.Signer.SignWithIdentityKey(packageHash);
+        var packageSignature = await wallet.Signer.SignWithIdentityKeyAsync(packageHash, ct).ConfigureAwait(false);
 
         // Build TransferPackage (direct/directFromCpfp cleared for swap)
         var transferPackage = new TransferPackage
@@ -307,7 +306,7 @@ public static class SwapService
             Transfer = new StartTransferRequest
             {
                 TransferId = transferId,
-                OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 ReceiverIdentityPublicKey = ByteString.CopyFrom(receiverPubKey),
                 ExpiryTime = expiryTime,
                 TransferPackage = transferPackage,
@@ -342,7 +341,7 @@ public static class SwapService
                 continue;
             }
 
-            var aggregated = FrostSigningHelper.AggregateFrostWithAdaptor(
+            var aggregated = FrostSigningHelper.AggregateFrostSignature(
                 sighash: info.Sighash,
                 selfCommitment: info.SelfCommitment,
                 selfSignature: job.UserSignature.ToByteArray(),
@@ -412,7 +411,7 @@ public static class SwapService
             ? Proto.Network.Mainnet : Proto.Network.Regtest;
         var filter = new TransferFilter
         {
-            ReceiverIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+            ReceiverIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
             Network = protoNetwork,
         };
         filter.TransferIds.Add(inboundSparkId);

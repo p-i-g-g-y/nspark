@@ -11,11 +11,11 @@ namespace NSpark.UnitTests.Services;
 public sealed class OperatorKeysTests
 {
     [Test]
-    public void Mainnet_wallet_collects_three_sorted_operator_keys()
+    public async Task Mainnet_wallet_collects_three_sorted_operator_keys()
     {
         var options = Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet });
         using var connection = new SparkConnection(options, new HttpClient());
-        var wallet = connection.CreateWallet(
+        var wallet = await connection.CreateWalletAsync(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
 
         var keys = TokenService.CollectOperatorIdentityPublicKeys(wallet);
@@ -30,7 +30,7 @@ public sealed class OperatorKeysTests
     }
 
     [Test]
-    public void Regtest_wallet_skips_operators_with_empty_identity_pubkey()
+    public async Task Regtest_wallet_skips_operators_with_empty_identity_pubkey()
     {
         // Regtest defaults have empty identity pubkey hex strings — they should be skipped.
         // Note: setting Network alone doesn't auto-switch SigningOperators (each
@@ -42,7 +42,7 @@ public sealed class OperatorKeysTests
             SigningOperators = SparkOptions.GetDefaultOperators(SparkNetwork.Regtest),
         });
         using var connection = new SparkConnection(options, new HttpClient());
-        var wallet = connection.CreateWallet(
+        var wallet = await connection.CreateWalletAsync(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
 
         var keys = TokenService.CollectOperatorIdentityPublicKeys(wallet);

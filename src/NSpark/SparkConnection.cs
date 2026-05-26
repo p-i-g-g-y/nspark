@@ -81,30 +81,38 @@ public sealed class SparkConnection : IDisposable, IAsyncDisposable
     public SparkOptions Options => _options;
 
     /// <summary>
-    /// Create a wallet instance from a BIP-39 mnemonic.
-    /// The wallet is lightweight — just keys + references to shared infra.
+    /// Create a wallet instance from a BIP-39 mnemonic. The wallet caches the identity
+    /// and deposit public keys via one round-trip to the signer at construction time.
     /// </summary>
-    public SparkWallet CreateWallet(string mnemonic, int? account = null, string? passphrase = null)
+    public Task<SparkWallet> CreateWalletAsync(
+        string mnemonic,
+        int? account = null,
+        string? passphrase = null,
+        CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(mnemonic);
         var effectiveAccount = account ?? (_options.Network == SparkNetwork.Regtest ? 0 : 1);
         var signer = SparkSigner.FromMnemonic(mnemonic, effectiveAccount, passphrase);
-        return CreateWallet(signer);
+        return CreateWalletAsync(signer, ct);
     }
 
     /// <summary>
-    /// Create a wallet instance from an existing signer.
+    /// Create a wallet instance from an existing signer. Performs one round-trip to the
+    /// signer to fetch and cache the identity and deposit public keys.
     /// </summary>
-    public SparkWallet CreateWallet(ISparkSigner signer)
+    public async Task<SparkWallet> CreateWalletAsync(ISparkSigner signer, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(signer);
 
         var sspClient = new SspGraphQLClient(
             _httpClient,
             _options.SspUrl,
-            ct => SspAuthenticator.GetTokenAsync(_httpClient, _options.SspUrl, signer, ct));
+            innerCt => SspAuthenticator.GetTokenAsync(_httpClient, _options.SspUrl, signer, innerCt));
 
-        return new SparkWallet(this, signer, sspClient);
+        var identityPubKey = await signer.GetIdentityPublicKeyAsync(ct).ConfigureAwait(false);
+        var depositPubKey = await signer.GetDepositPublicKeyAsync(ct).ConfigureAwait(false);
+
+        return new SparkWallet(this, signer, sspClient, identityPubKey, depositPubKey);
     }
 
     /// <inheritdoc />

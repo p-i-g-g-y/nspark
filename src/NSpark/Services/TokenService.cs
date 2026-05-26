@@ -188,7 +188,7 @@ public static class TokenService
             wallet,
             selected,
             [(receiverPubKey, rawTokenId, amount)],
-            changeOwnerPubKey: wallet.Signer.IdentityPublicKey);
+            changeOwnerPubKey: wallet.IdentityPublicKey);
 
         var (hashHex, _) = await BroadcastTokenTransactionV2Async(
             wallet,
@@ -244,7 +244,7 @@ public static class TokenService
                 "Extra metadata must be <= 1024 bytes.");
         }
 
-        var issuerPubKey = wallet.Signer.IdentityPublicKey;
+        var issuerPubKey = wallet.IdentityPublicKey;
         var createInput = new TokenCreateInput
         {
             IssuerPublicKey = ByteString.CopyFrom(issuerPubKey),
@@ -292,7 +292,7 @@ public static class TokenService
         }
 
         var (rawTokenId, _) = TokenIdentifier.Decode(bech32mTokenIdentifier, wallet.Client.Options.Network);
-        var issuerPubKey = wallet.Signer.IdentityPublicKey;
+        var issuerPubKey = wallet.IdentityPublicKey;
 
         var mintInput = new TokenMintInput
         {
@@ -348,7 +348,7 @@ public static class TokenService
             wallet,
             selected,
             [(burnPubKey, rawTokenId, amount)],
-            changeOwnerPubKey: wallet.Signer.IdentityPublicKey);
+            changeOwnerPubKey: wallet.IdentityPublicKey);
 
         var (hashHex, _) = await BroadcastTokenTransactionV2Async(
             wallet,
@@ -572,11 +572,11 @@ public static class TokenService
 
         // Phase 1: sign the partial hash, send start_transaction.
         var partialHash = TokenHashing.HashTokenTransactionV2(tx, partialHash: true);
-        var ownerSignatures = BuildOwnerSignatures(wallet, tx, partialHash, signingPublicKeys);
+        var ownerSignatures = await BuildOwnerSignaturesAsync(wallet, tx, partialHash, signingPublicKeys, ct).ConfigureAwait(false);
 
         var startRequest = new StartTransactionRequest
         {
-            IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+            IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
             PartialTokenTransaction = tx,
             ValidityDurationSeconds = 60,
         };
@@ -595,13 +595,13 @@ public static class TokenService
 
         // Phase 2: hash the final tx, build per-operator signatures, commit.
         var finalHash = TokenHashing.HashTokenTransactionV2(finalTx, partialHash: false);
-        var operatorSignatures = BuildOperatorSignatures(wallet, finalTx, finalHash);
+        var operatorSignatures = await BuildOperatorSignaturesAsync(wallet, finalTx, finalHash, ct).ConfigureAwait(false);
 
         var commitRequest = new CommitTransactionRequest
         {
             FinalTokenTransaction = finalTx,
             FinalTokenTransactionHash = ByteString.CopyFrom(finalHash),
-            OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+            OwnerIdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
         };
         commitRequest.InputTtxoSignaturesPerOperator.AddRange(operatorSignatures);
 
@@ -614,11 +614,12 @@ public static class TokenService
 
     // ───────────────────────────────── Owner / operator signatures ─────────────────────────────────
 
-    private static List<SignatureWithIndex> BuildOwnerSignatures(
+    private static async Task<List<SignatureWithIndex>> BuildOwnerSignaturesAsync(
         SparkWallet wallet,
         Proto.Token.TokenTransaction tx,
         byte[] hash,
-        IReadOnlyList<byte[]>? signingPublicKeys)
+        IReadOnlyList<byte[]>? signingPublicKeys,
+        CancellationToken ct)
     {
         var signatures = new List<SignatureWithIndex>();
 
@@ -627,7 +628,7 @@ public static class TokenService
             case Proto.Token.TokenTransaction.TokenInputsOneofCase.MintInput:
             case Proto.Token.TokenTransaction.TokenInputsOneofCase.CreateInput:
                 {
-                    var sig = wallet.Signer.SignWithIdentityKey(hash);
+                    var sig = await wallet.Signer.SignWithIdentityKeyAsync(hash, ct).ConfigureAwait(false);
                     signatures.Add(new SignatureWithIndex
                     {
                         Signature = ByteString.CopyFrom(sig),
@@ -643,7 +644,7 @@ public static class TokenService
                             "token.sign",
                             "Missing signing public keys for transfer transaction.");
                     }
-                    var identityKey = wallet.Signer.IdentityPublicKey;
+                    var identityKey = wallet.IdentityPublicKey;
                     for (int i = 0; i < signingPublicKeys.Count; i++)
                     {
                         if (!signingPublicKeys[i].AsSpan().SequenceEqual(identityKey))
@@ -652,7 +653,7 @@ public static class TokenService
                                 "token.sign",
                                 $"Cannot sign token input with unknown key (hex: {Convert.ToHexString(signingPublicKeys[i]).ToLowerInvariant()}).");
                         }
-                        var sig = wallet.Signer.SignWithIdentityKey(hash);
+                        var sig = await wallet.Signer.SignWithIdentityKeyAsync(hash, ct).ConfigureAwait(false);
                         signatures.Add(new SignatureWithIndex
                         {
                             Signature = ByteString.CopyFrom(sig),
@@ -668,10 +669,11 @@ public static class TokenService
         return signatures;
     }
 
-    private static List<InputTtxoSignaturesPerOperator> BuildOperatorSignatures(
+    private static async Task<List<InputTtxoSignaturesPerOperator>> BuildOperatorSignaturesAsync(
         SparkWallet wallet,
         Proto.Token.TokenTransaction tx,
-        byte[] finalHash)
+        byte[] finalHash,
+        CancellationToken ct)
     {
         var result = new List<InputTtxoSignaturesPerOperator>();
         foreach (var operatorPubKey in CollectOperatorIdentityPublicKeys(wallet))
@@ -684,7 +686,7 @@ public static class TokenService
                 case Proto.Token.TokenTransaction.TokenInputsOneofCase.MintInput:
                 case Proto.Token.TokenTransaction.TokenInputsOneofCase.CreateInput:
                     {
-                        var sig = wallet.Signer.SignWithIdentityKey(payloadHash);
+                        var sig = await wallet.Signer.SignWithIdentityKeyAsync(payloadHash, ct).ConfigureAwait(false);
                         ttxoSignatures.Add(new SignatureWithIndex
                         {
                             Signature = ByteString.CopyFrom(sig),
@@ -697,7 +699,7 @@ public static class TokenService
                         var inputs = tx.TransferInput.OutputsToSpend;
                         for (int i = 0; i < inputs.Count; i++)
                         {
-                            var sig = wallet.Signer.SignWithIdentityKey(payloadHash);
+                            var sig = await wallet.Signer.SignWithIdentityKeyAsync(payloadHash, ct).ConfigureAwait(false);
                             ttxoSignatures.Add(new SignatureWithIndex
                             {
                                 Signature = ByteString.CopyFrom(sig),
@@ -821,7 +823,7 @@ public static class TokenService
                     Cursor = cursor ?? string.Empty,
                 },
             };
-            request.OwnerPublicKeys.Add(ByteString.CopyFrom(wallet.Signer.IdentityPublicKey));
+            request.OwnerPublicKeys.Add(ByteString.CopyFrom(wallet.IdentityPublicKey));
             if (tokenIdentifiers is not null)
             {
                 foreach (var id in tokenIdentifiers)

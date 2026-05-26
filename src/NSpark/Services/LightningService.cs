@@ -32,9 +32,17 @@ public static class LightningService
             throw new ArgumentException("descriptionHash must be 32 bytes (SHA-256).", nameof(descriptionHash));
         }
 
-        // Step 1: Generate preimage and compute payment hash
-        var preimage = SparkFrostMethods.RandomSecretKeyBytes();
-        var paymentHash = SHA256.HashData(preimage);
+        // Step 1: Generate deterministic preimage shares via the signer.
+        // transferId seeds the signer's HMAC-based preimage derivation; the payment_hash
+        // is the public anchor returned to the wallet.
+        var transferId = Guid.NewGuid().ToString();
+        var soConfigs = wallet.Client.Options.SigningOperators;
+        var numOperators = (uint)soConfigs.Length;
+        var threshold = (uint)((numOperators + 2) / 2); // same as JS SDK
+
+        var preimageResult = await wallet.Signer.CreatePreimageSharesAsync(
+            transferId, threshold, numOperators, ct).ConfigureAwait(false);
+        var paymentHash = preimageResult.PaymentHash;
         var paymentHashHex = Convert.ToHexString(paymentHash).ToLowerInvariant();
 
         // Step 2: Request invoice from SSP via GraphQL
@@ -65,14 +73,7 @@ public static class LightningService
         var requestData = response.RequestLightningReceive.Request;
         var invoiceData = requestData.Invoice;
 
-        // Step 3: Split preimage and store encrypted shares with SOs
-        var soConfigs = wallet.Client.Options.SigningOperators;
-        var numOperators = (uint)soConfigs.Length;
-        var threshold = (uint)((numOperators + 2) / 2); // same as JS SDK
-
-        var shares = SparkFrostMethods.SplitSecretWithProofsUniffi(
-            preimage, threshold, numOperators);
-
+        // Step 3: Store encrypted shares with SOs
         var coordinatorAddress = soConfigs[0].Address;
         var coordinatorClient = wallet.Pool.GetSparkClient(coordinatorAddress);
         var headers = await wallet.GetAuthMetadataAsync(coordinatorAddress, ct).ConfigureAwait(false);
@@ -82,20 +83,21 @@ public static class LightningService
             PaymentHash = ByteString.CopyFrom(paymentHash),
             Threshold = threshold,
             InvoiceString = invoiceData.EncodedInvoice,
-            UserIdentityPublicKey = ByteString.CopyFrom(receiverIdentityPublicKey ?? wallet.Signer.IdentityPublicKey),
+            UserIdentityPublicKey = ByteString.CopyFrom(receiverIdentityPublicKey ?? wallet.IdentityPublicKey),
         };
 
-        // Match shares to operators by index (0-based), encrypt to each SO's identity key
+        // Match shares to operators by index (0-based), encrypt to each SO's identity key.
+        // ECIES encryption uses the SO's *public* key — no signer involvement needed.
         for (int i = 0; i < soConfigs.Length; i++)
         {
             var soConfig = soConfigs[i];
-            var share = shares[i];
+            var share = preimageResult.Shares[i];
 
             var secretShare = new SecretShare
             {
-                SecretShare_ = ByteString.CopyFrom(share.@share),
+                SecretShare_ = ByteString.CopyFrom(share.Share),
             };
-            foreach (var proof in share.@proofs)
+            foreach (var proof in share.Proofs)
             {
                 secretShare.Proofs.Add(ByteString.CopyFrom(proof));
             }
@@ -307,7 +309,7 @@ public static class LightningService
         var soCount = (uint)soOperators.Count;
 
         var sspPubKey = Convert.FromHexString(wallet.Client.Options.SspIdentityPublicKeyHex);
-        var senderPubKey = wallet.Signer.IdentityPublicKey;
+        var senderPubKey = wallet.IdentityPublicKey;
         var transferId = Guid.NewGuid().ToString();
         var expiryTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(
             DateTimeOffset.UtcNow.AddDays(16));
@@ -321,42 +323,42 @@ public static class LightningService
             perSoTweaks[soId] = new SendLeafKeyTweaks();
         }
 
+        var threshold = (uint)Math.Max(2, (soCount + 2) / 2);
+
         for (int i = 0; i < selectedLeaves.Count; i++)
         {
             var leaf = selectedLeaves[i];
-            // Key tweak = oldSigningKey - newRandomKey (matches JS SDK subtractSplitAndEncrypt)
-            var oldSigningKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
-            var newRandomKey = SparkFrostMethods.RandomSecretKeyBytes();
-            var keyTweak = ClaimService.SubtractPrivateKeys(oldSigningKey, newRandomKey);
-            var vssShares = SparkFrostMethods.SplitSecretWithProofsUniffi(
-                keyTweak, threshold: Math.Max(2, (soCount + 2) / 2), numShares: soCount);
-            // Encrypt the NEW key (intermediate signing key), NOT the tweak
-            var secretCipher = SparkFrostMethods.EncryptEcies(newRandomKey, sspPubKey);
+
+            // Compute leaf tweak shares via the signer — the leaf signing key never leaves the signer.
+            var tweak = await wallet.Signer.ComputeLeafTweakSharesAsync(
+                leaf.Id, sspPubKey, threshold, soCount, ct).ConfigureAwait(false);
+            var secretCipher = tweak.SecretCipher;
 
             var sigPayload = Encoding.UTF8.GetBytes(leaf.Id + transferId);
             sigPayload = [.. sigPayload, .. secretCipher];
             // Compact signature (64 bytes) for leaf key tweak, matching JS SDK compact=true
-            var tweakSig = wallet.Signer.SignCompactWithIdentityKey(SHA256.HashData(sigPayload));
+            var tweakSig = await wallet.Signer.SignCompactWithIdentityKeyAsync(
+                SHA256.HashData(sigPayload), ct).ConfigureAwait(false);
 
             var pubkeySharesTweak = new Dictionary<string, ByteString>();
             foreach (var (soId2, soInfo2) in soOperators)
             {
-                var matchedShare = vssShares.First(s => s.@index == soInfo2.Index + 1);
+                var matchedShare = tweak.Shares.First(s => s.Index == soInfo2.Index + 1);
                 pubkeySharesTweak[soId2] = ByteString.CopyFrom(
-                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.@share, compressed: true));
+                    SparkFrostMethods.GetPublicKeyBytes(matchedShare.Share, compressed: true));
             }
 
             foreach (var (soId, soInfo) in soOperators)
             {
-                var share = vssShares.First(s => s.@index == soInfo.Index + 1);
+                var share = tweak.Shares.First(s => s.Index == soInfo.Index + 1);
                 var leafTweak = new SendLeafKeyTweak
                 {
                     LeafId = leaf.Id,
-                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.@share) },
+                    SecretShareTweak = new SecretShare { SecretShare_ = ByteString.CopyFrom(share.Share) },
                     SecretCipher = ByteString.CopyFrom(secretCipher),
                     Signature = ByteString.CopyFrom(tweakSig),
                 };
-                foreach (var proof in share.@proofs)
+                foreach (var proof in share.Proofs)
                 {
                     leafTweak.SecretShareTweak.Proofs.Add(ByteString.CopyFrom(proof));
                 }
@@ -398,7 +400,6 @@ public static class LightningService
         {
             var leaf = selectedLeaves[i];
             var node = leaf.Node;
-            var signingKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
             var verifyingKey = node.VerifyingPublicKey.ToByteArray();
             var nodeTxBytes = node.NodeTx.ToByteArray();
 
@@ -420,10 +421,11 @@ public static class LightningService
                 seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
                 applyFee: false, feeSats: 0, network: networkStr);
 
-            htlcCpfpJobs.Add(FrostSigningHelper.BuildSigningJob(
-                node.Id, signingKey, verifyingKey,
+            htlcCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
+                wallet.Signer, node.Id, verifyingKey,
                 cpfpHtlc.@tx, cpfpHtlc.@sighash,
-                htlcCommitments[i].SigningNonceCommitments));
+                htlcCommitments[i].SigningNonceCommitments, ct)
+                .ConfigureAwait(false));
 
             // Direct HTLC refund tx (if directTx exists)
             if (node.DirectTx.Length > 0)
@@ -434,10 +436,11 @@ public static class LightningService
                     seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
                     applyFee: true, feeSats: DefaultFeeSats, network: networkStr);
 
-                htlcDirectJobs.Add(FrostSigningHelper.BuildSigningJob(
-                    node.Id, signingKey, verifyingKey,
+                htlcDirectJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
+                    wallet.Signer, node.Id, verifyingKey,
                     directHtlc.@tx, directHtlc.@sighash,
-                    htlcCommitments[i + selectedLeaves.Count].SigningNonceCommitments));
+                    htlcCommitments[i + selectedLeaves.Count].SigningNonceCommitments, ct)
+                    .ConfigureAwait(false));
             }
 
             // DirectFromCpfp HTLC refund tx (applyFee: true)
@@ -447,10 +450,11 @@ public static class LightningService
                 seqlockPubkey: senderPubKey, htlcSequence: LightningHtlcSequence,
                 applyFee: true, feeSats: DefaultFeeSats, network: networkStr);
 
-            htlcDirectFromCpfpJobs.Add(FrostSigningHelper.BuildSigningJob(
-                node.Id, signingKey, verifyingKey,
+            htlcDirectFromCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
+                wallet.Signer, node.Id, verifyingKey,
                 directFromCpfpHtlc.@tx, directFromCpfpHtlc.@sighash,
-                htlcCommitments[i + 2 * selectedLeaves.Count].SigningNonceCommitments));
+                htlcCommitments[i + 2 * selectedLeaves.Count].SigningNonceCommitments, ct)
+                .ConfigureAwait(false));
         }
 
         // Step 7: Build TransferPackage with HTLC jobs + key tweaks
@@ -486,7 +490,7 @@ public static class LightningService
             .AddMapStringToBytes(keyTweakPackage)
             .Hash();
         transferPackage.UserSignature = ByteString.CopyFrom(
-            wallet.Signer.SignWithIdentityKey(packageHash));
+            await wallet.Signer.SignWithIdentityKeyAsync(packageHash, ct).ConfigureAwait(false));
 
         // Step 8: Build StartTransferRequest with TransferPackage + leaves_to_send
         var startTransferRequest = new StartTransferRequest
@@ -531,7 +535,6 @@ public static class LightningService
         {
             var leaf = selectedLeaves[i];
             var node = leaf.Node;
-            var signingKey = wallet.Signer.DeriveLeafSigningKey(leaf.Id);
             var verifyingKey = node.VerifyingPublicKey.ToByteArray();
             var nodeTxBytes = node.NodeTx.ToByteArray();
             var directNodeTx = node.DirectTx.Length > 0 ? node.DirectTx.ToByteArray() : null;
@@ -562,10 +565,11 @@ public static class LightningService
                 feeSats: SparkConstants.DefaultRefundFeeSats);
 
             // Only cpfp goes into transfer.leavesToSend (direct/directFromCpfp omitted per ref SDK)
-            swapCpfpJobs.Add(FrostSigningHelper.BuildSigningJob(
-                node.Id, signingKey, verifyingKey,
+            swapCpfpJobs.Add(await FrostSigningHelper.BuildSigningJobAsync(
+                wallet.Signer, node.Id, verifyingKey,
                 refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
-                swapCommitments[i].SigningNonceCommitments));
+                swapCommitments[i].SigningNonceCommitments, ct)
+                .ConfigureAwait(false));
         }
 
         // Step 11: Build StartUserSignedTransferRequest (cpfp only)

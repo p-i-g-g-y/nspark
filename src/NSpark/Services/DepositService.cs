@@ -7,7 +7,6 @@ using NSpark.Models;
 using NSpark.Proto;
 using uniffi.spark_frost;
 using Network = NSpark.Proto.Network;
-using KeyPackage = uniffi.spark_frost.KeyPackage;
 
 namespace NSpark.Services;
 
@@ -38,13 +37,12 @@ public static class DepositService
             : Network.Regtest;
 
         var leafId = Guid.NewGuid().ToString().ToLowerInvariant();
-        var signingKey = wallet.Signer.DeriveLeafSigningKey(leafId);
-        var signingPubKey = SparkFrostMethods.GetPublicKeyBytes(signingKey, compressed: true);
+        var signingPubKey = await wallet.Signer.GetLeafPublicKeyAsync(leafId, ct).ConfigureAwait(false);
 
         var response = await client.generate_deposit_addressAsync(
             new GenerateDepositAddressRequest
             {
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 SigningPublicKey = ByteString.CopyFrom(signingPubKey),
                 Network = network,
                 LeafId = leafId,
@@ -87,7 +85,7 @@ public static class DepositService
         var queryResp = await client.query_unused_deposit_addressesAsync(
             new QueryUnusedDepositAddressesRequest
             {
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = protoNetwork,
             },
             headers,
@@ -102,9 +100,8 @@ public static class DepositService
         var verifyingKey = depositInfo.VerifyingPublicKey.ToByteArray();
         var depositAddress = depositInfo.DepositAddress;
 
-        // Step 3: Derive signing key
-        var signingKey = wallet.Signer.DeriveLeafSigningKey(leafId);
-        var signingPubKey = SparkFrostMethods.GetPublicKeyBytes(signingKey, compressed: true);
+        // Step 3: Get the per-leaf public key from the signer (no private key needed in process)
+        var signingPubKey = await wallet.Signer.GetLeafPublicKeyAsync(leafId, ct).ConfigureAwait(false);
 
         // Step 4: Create root node tx pair (CPFP + direct)
         var rootNodeTx = SparkFrostMethods.ConstructNodeTxPair(
@@ -133,21 +130,21 @@ public static class DepositService
             cancellationToken: ct).ConfigureAwait(false);
         var allCommitments = commitmentsResponse.SigningCommitments.ToList();
 
-        // Step 7: Build signing jobs
-        var rootJob = FrostSigningHelper.BuildSigningJob(
-            leafId, signingKey, verifyingKey,
+        // Step 7: Build signing jobs (FROST signing happens inside the signer)
+        var rootJob = await FrostSigningHelper.BuildSigningJobAsync(
+            wallet.Signer, leafId, verifyingKey,
             rootNodeTx.@cpfp.@tx, rootNodeTx.@cpfp.@sighash,
-            allCommitments[0].SigningNonceCommitments);
+            allCommitments[0].SigningNonceCommitments, ct).ConfigureAwait(false);
 
-        var refundJob = FrostSigningHelper.BuildSigningJob(
-            leafId, signingKey, verifyingKey,
+        var refundJob = await FrostSigningHelper.BuildSigningJobAsync(
+            wallet.Signer, leafId, verifyingKey,
             refundTrio.@cpfpRefund.@tx, refundTrio.@cpfpRefund.@sighash,
-            allCommitments[1].SigningNonceCommitments);
+            allCommitments[1].SigningNonceCommitments, ct).ConfigureAwait(false);
 
-        var directFromCpfpRefundJob = FrostSigningHelper.BuildSigningJob(
-            leafId, signingKey, verifyingKey,
+        var directFromCpfpRefundJob = await FrostSigningHelper.BuildSigningJobAsync(
+            wallet.Signer, leafId, verifyingKey,
             refundTrio.@directFromCpfpRefund.@tx, refundTrio.@directFromCpfpRefund.@sighash,
-            allCommitments[2].SigningNonceCommitments);
+            allCommitments[2].SigningNonceCommitments, ct).ConfigureAwait(false);
 
         // Step 8: Build UTXO proto (txid in internal byte order = reversed)
         var txidBytes = Convert.FromHexString(depositTxId);
@@ -165,7 +162,7 @@ public static class DepositService
         await client.finalize_deposit_tree_creationAsync(
             new FinalizeDepositTreeCreationRequest
             {
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 OnChainUtxo = utxo,
                 RootTxSigningJob = rootJob,
                 RefundTxSigningJob = refundJob,
@@ -189,14 +186,13 @@ public static class DepositService
         var network = wallet.Client.Options.Network == SparkNetwork.Mainnet
             ? Network.Mainnet : Network.Regtest;
 
-        var staticKey = wallet.Signer.DeriveStaticDepositKey(0);
-        var staticPubKey = SparkFrostMethods.GetPublicKeyBytes(staticKey, compressed: true);
+        var staticPubKey = await wallet.Signer.GetStaticDepositPublicKeyAsync(0, ct).ConfigureAwait(false);
 
         var response = await client.generate_static_deposit_addressAsync(
             new GenerateStaticDepositAddressRequest
             {
                 SigningPublicKey = ByteString.CopyFrom(staticPubKey),
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = network,
                 HashVariant = HashVariant.V2,
             },
@@ -234,8 +230,10 @@ public static class DepositService
         var creditAmountSats = quoteResponse.StaticDepositQuote.CreditAmountSats;
         var quoteSignature = quoteResponse.StaticDepositQuote.Signature;
 
-        // Step 2: Build signing payload
-        var staticSecretKey = wallet.Signer.DeriveStaticDepositKey(0);
+        // Step 2: Build signing payload. The Spark static-deposit protocol requires revealing
+        // the raw static-deposit private key to the SSP — signers that refuse to export it
+        // (HSM/KMS) will throw NotSupportedException and static-deposit claims are unavailable.
+        var staticSecretKey = await wallet.Signer.ExportStaticDepositPrivateKeyAsync(0, ct).ConfigureAwait(false);
         var depositSecretKeyHex = Convert.ToHexString(staticSecretKey).ToLowerInvariant();
 
         // Payload: "claim_static_deposit" + network(lowercase) + txid + outputIndex(LE u32) + requestType(u8: 0=Fixed) + creditAmountSats(LE u64) + sspSignature
@@ -251,7 +249,7 @@ public static class DepositService
         ms.Write(sigBytes);
 
         var payloadHash = SHA256.HashData(ms.ToArray());
-        var signature = wallet.Signer.SignWithIdentityKey(payloadHash);
+        var signature = await wallet.Signer.SignWithIdentityKeyAsync(payloadHash, ct).ConfigureAwait(false);
 
         // Step 3: Claim via SSP
         var claimResponse = await wallet.SspClient.ExecuteAsync<ClaimStaticDepositResponse>(
@@ -292,7 +290,7 @@ public static class DepositService
         var response = await client.query_unused_deposit_addressesAsync(
             new QueryUnusedDepositAddressesRequest
             {
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
                 Network = protoNetwork,
                 Limit = limit,
                 Offset = offset,
@@ -439,18 +437,11 @@ public static class DepositService
         ms.Write(Encoding.UTF8.GetBytes(Convert.ToHexString(sighash).ToLowerInvariant()));
 
         var payloadHash = SHA256.HashData(ms.ToArray());
-        var userSignature = wallet.Signer.SignWithIdentityKey(payloadHash);
+        var userSignature = await wallet.Signer.SignWithIdentityKeyAsync(payloadHash, ct).ConfigureAwait(false);
 
-        // Step 6: Create initial FROST nonce with static key
-        var staticKey = wallet.Signer.DeriveStaticDepositKey(0);
-        var staticPubKey = SparkFrostMethods.GetPublicKeyBytes(staticKey, compressed: true);
-
-        // Use staticPubKey as both pubkey and verifyingKey for initial nonce (before server returns real verifyingKey)
-        var initialKeyPackage = new KeyPackage(
-            secretKey: staticKey,
-            publicKey: staticPubKey,
-            verifyingKey: staticPubKey);
-        var nonceResult = SparkFrostMethods.FrostNonce(initialKeyPackage);
+        // Step 6: Phase-1 FROST nonce via signer (static-deposit key never leaves the signer)
+        var staticNonce = await wallet.Signer.GenerateStaticDepositFrostNonceAsync(0, ct).ConfigureAwait(false);
+        var staticPubKey = staticNonce.PublicKey;
 
         // Step 7: Build SigningJob
         var signingJob = new Proto.SigningJob
@@ -459,8 +450,8 @@ public static class DepositService
             RawTx = ByteString.CopyFrom(spendTx),
             SigningNonceCommitment = new Proto.Common.SigningCommitment
             {
-                Hiding = ByteString.CopyFrom(nonceResult.@commitment.@hiding),
-                Binding = ByteString.CopyFrom(nonceResult.@commitment.@binding),
+                Hiding = ByteString.CopyFrom(staticNonce.Commitment.Hiding),
+                Binding = ByteString.CopyFrom(staticNonce.Commitment.Binding),
             },
         };
 
@@ -486,11 +477,25 @@ public static class DepositService
             headers,
             cancellationToken: ct).ConfigureAwait(false);
 
-        // Step 10: Build real KeyPackage with actual verifyingKey from response and sign FROST + aggregate
+        // Step 10: Phase-2 FROST sign via signer with the real verifyingKey from the SO,
+        // then aggregate locally (aggregation is a pure-public-key op).
         var verifyingKey = refundResponse.DepositAddress.VerifyingPublicKey.ToByteArray();
-        var aggregatedSig = FrostSigningHelper.SignAndAggregateFrost(
-            sighash, staticKey, verifyingKey,
-            nonceResult, refundResponse.RefundTxSigningResult);
+        var soCommitments = new Dictionary<string, NSpark.Signer.SigningCommitment>();
+        foreach (var (soId, commitment) in refundResponse.RefundTxSigningResult.SigningNonceCommitments)
+        {
+            soCommitments[soId] = new NSpark.Signer.SigningCommitment(
+                commitment.Hiding.ToByteArray(), commitment.Binding.ToByteArray());
+        }
+        var selfSignature = await wallet.Signer.SignStaticDepositFrostWithNonceAsync(
+            0, staticNonce.NonceHandle, sighash, verifyingKey, soCommitments, ct).ConfigureAwait(false);
+        var aggregatedSig = FrostSigningHelper.AggregateFrostSignature(
+            sighash: sighash,
+            selfCommitment: staticNonce.Commitment,
+            selfSignature: selfSignature,
+            selfPublicKey: staticPubKey,
+            verifyingKey: verifyingKey,
+            signingResult: refundResponse.RefundTxSigningResult,
+            adaptorPublicKey: null);
 
         // Step 11: Add witness to tx and return hex
         var signedTx = AddWitnessToTx(spendTx, aggregatedSig);

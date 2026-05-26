@@ -23,7 +23,7 @@ public static class EventService
         using var stream = client.subscribe_to_events(
             new SubscribeToEventsRequest
             {
-                IdentityPublicKey = ByteString.CopyFrom(wallet.Signer.IdentityPublicKey),
+                IdentityPublicKey = ByteString.CopyFrom(wallet.IdentityPublicKey),
             },
             headers,
             cancellationToken: ct);

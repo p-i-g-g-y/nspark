@@ -26,12 +26,12 @@ public class TokenReadTests
     private SparkWallet _wallet = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _wallet = _client.CreateWallet(MnemonicA);
+        _wallet = await _client.CreateWalletAsync(MnemonicA);
     }
 
     [OneTimeTearDown]
@@ -109,13 +109,13 @@ public class TokenLifecycleTests
     private SparkWallet _walletB = null!;
 
     [OneTimeSetUp]
-    public void Setup()
+    public async Task Setup()
     {
         _client = new SparkConnection(
             Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet }),
             new HttpClient());
-        _walletA = _client.CreateWallet(MnemonicA);
-        _walletB = _client.CreateWallet(MnemonicB);
+        _walletA = await _client.CreateWalletAsync(MnemonicA);
+        _walletB = await _client.CreateWalletAsync(MnemonicB);
     }
 
     [OneTimeTearDown]

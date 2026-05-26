@@ -18,11 +18,11 @@ public sealed class TokenValidationTests
     private SparkWallet _wallet = null!;
 
     [SetUp]
-    public void Setup()
+    public async Task Setup()
     {
         var options = Options.Create(new SparkOptions { Network = SparkNetwork.Mainnet });
         _connection = new SparkConnection(options, new HttpClient());
-        _wallet = _connection.CreateWallet(
+        _wallet = await _connection.CreateWalletAsync(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
     }
 
