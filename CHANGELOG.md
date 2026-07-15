@@ -10,6 +10,40 @@ will be reflected here.
 
 ## [Unreleased]
 
+## [0.2.0-alpha.3] - 2026-07-15
+
+### Added
+- `GetRecoverySnapshotAsync()` — unilateral-exit recovery snapshots: the
+  wallet's leaves plus the pruned ancestor transaction chains an exit package
+  needs, with a best-effort repair pass for parents the bulk query omits.
+  Snapshot queries run on dedicated 128 MiB gRPC channels because
+  include-parents responses exceed the 4 MiB transport default on long-lived
+  wallets. New models: `SparkRecoverySnapshot`, `SparkRecoveryLeaf`,
+  `SparkRecoveryNode`. Ports `getRecoverySnapshot()` from the Swift SDK.
+- `RenewExhaustedLeavesAsync()` — leaf timelock renewal via the coordinator's
+  `renew_leaf` RPC with all three protocol variants (refund reset, split-node
+  splice, zero-timelock node). Un-freezes leaves whose refund timelock ran
+  below 200 blocks; per-leaf best-effort. New model: `SparkLeafRenewal`; new
+  property: `SparkLeaf.RefundTimelockBlocks`.
+- `ConsolidateLeavesAsync()` — off-chain leaf consolidation toward the binary
+  decomposition of the balance via zero-fee SSP swaps, so recovery snapshots
+  stay kilobytes instead of megabytes and unilateral exits cost a handful of
+  transaction chains. Renews exhausted leaves first, consolidates around any
+  that stay frozen. New model: `SparkLeafConsolidation` (with measured
+  `FeeSats`).
+- `SparkLeafTimelockExhaustedException` — typed error for leaves frozen at
+  the refund-timelock floor; carries the `LeafId`.
+- New docs page `docs/recovery.md` covering snapshots, renewal,
+  consolidation, and unilateral-exit execution.
+
+### Fixed
+- Timelock-floor guard: the transfer, swap, withdrawal, and Lightning spend
+  paths decremented the refund timelock without checking the floor, silently
+  underflowing the `uint` sequence for a leaf at ≤ 100 blocks and producing
+  garbage the coordinator rejected. All five call sites now route through a
+  shared guard that throws `SparkLeafTimelockExhaustedException` instead, and
+  consolidation skips such leaves until they are renewed.
+
 ## [0.2.0-alpha.2] - 2026-05-26
 
 ### Docs
@@ -341,6 +375,7 @@ the wallet plugs into the gRPC request.
 - See [docs/trust-model.md](docs/trust-model.md) for the documented threat
   model and the default Signing Operator / SSP trust assumptions.
 
-[Unreleased]: https://github.com/p-i-g-g-y/nspark/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/p-i-g-g-y/nspark/compare/v0.2.0-alpha.3...HEAD
+[0.2.0-alpha.3]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.2.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/p-i-g-g-y/nspark/releases/tag/v0.1.0-alpha.1
