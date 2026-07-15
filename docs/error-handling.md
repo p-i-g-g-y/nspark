@@ -17,6 +17,7 @@ SparkException (abstract)
 │   ├── InsufficientFundsException
 │   ├── PaymentFailedException
 │   └── InvoiceExpiredException
+├── SparkLeafTimelockExhaustedException  not retryable — renew the leaf first
 ├── SparkTransferException
 ├── SparkDepositException
 └── SparkWithdrawalException

@@ -105,6 +105,7 @@ SHA-256 hashes for every shipped binary are published in each [GitHub release](h
 | NIP-57 zaps (description hash) | [docs/lightning/description-hash.md](docs/lightning/description-hash.md) |
 | Custom signers / HSM | [docs/signer.md](docs/signer.md) |
 | Deposits & withdrawals | [docs/deposits.md](docs/deposits.md), [docs/withdrawals.md](docs/withdrawals.md) |
+| Recovery snapshots & leaf maintenance | [docs/recovery.md](docs/recovery.md) |
 | Configuration reference | [docs/configuration.md](docs/configuration.md) |
 | Logging events | [docs/logging.md](docs/logging.md) |
 | OpenTelemetry / observability | [docs/observability.md](docs/observability.md) |
@@ -129,6 +130,8 @@ NSpark targets a **1.0.0** release on NuGet. Until then, versions are published 
 | Description-hash (NIP-57 zaps) | ✅ |
 | On-chain deposits / withdrawals | ✅ |
 | Spark-to-Spark transfers | ✅ |
+| Unilateral-exit recovery snapshots | ✅ |
+| Leaf renewal & consolidation | ✅ |
 | FROST signing via Rust UniFFI | ✅ |
 | OpenTelemetry tracing + metrics | ✅ |
 | Polly v8 resilience | ✅ |

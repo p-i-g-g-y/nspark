@@ -734,6 +734,14 @@ public class TransferTests
         var balB = await _walletB.GetBalanceAsync(cts.Token);
         Assert.That(balB.SatsBalance.Available, Is.GreaterThan(0));
 
+        // Drain pattern: renew any floor-timelock leaves first so the full
+        // balance can move (a leaf at timelock <= 100 cannot be spent and
+        // would fail the send with SparkLeafTimelockExhaustedException).
+        var renewal = await _walletB.RenewExhaustedLeavesAsync(cts.Token);
+        TestContext.Out.WriteLine(
+            $"WalletB renewal: checked {renewal.Checked}, renewed {renewal.Renewed}, " +
+            $"failures: [{string.Join("; ", renewal.Failures)}]");
+
         var pubA = Convert.FromHexString(_walletA.IdentityPublicKeyHex);
         var transfer = await _walletB.SendAsync(pubA, balB.SatsBalance.Available, null, cts.Token);
         TestContext.Out.WriteLine($"Return transfer: {transfer.Id}");

@@ -42,6 +42,37 @@ public static class Bech32mHelper
     }
 
     /// <summary>
+    /// Encode a segwit v1+ (bech32m) address. Per BIP-350 the witness version is
+    /// a single raw 5-bit word prepended to the 8→5-bit converted witness
+    /// program — unlike <see cref="Encode"/>, which converts the whole payload.
+    /// </summary>
+    internal static string EncodeSegwit(string hrp, byte witnessVersion, ReadOnlySpan<byte> program)
+    {
+        var programWords = ConvertBits(program, fromBits: 8, toBits: 5, pad: true)
+            ?? throw new SparkConfigurationException(
+                "bech32m.encode", "Failed to convert witness program to 5-bit words.");
+
+        var words = new byte[programWords.Length + 1];
+        words[0] = witnessVersion;
+        programWords.CopyTo(words.AsSpan(1));
+
+        var checksum = CreateChecksum(hrp, words);
+
+        var sb = new StringBuilder(hrp.Length + 1 + words.Length + 6);
+        sb.Append(hrp);
+        sb.Append('1');
+        foreach (var w in words)
+        {
+            sb.Append(Charset[w]);
+        }
+        foreach (var c in checksum)
+        {
+            sb.Append(Charset[c]);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Decode a Bech32m string into its HRP and raw byte payload.
     /// </summary>
     /// <param name="bech32m">The encoded string (case-insensitive).</param>

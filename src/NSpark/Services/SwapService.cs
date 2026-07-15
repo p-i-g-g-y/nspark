@@ -11,9 +11,6 @@ namespace NSpark.Services;
 /// </summary>
 public static class SwapService
 {
-    private const uint TimeLockInterval = 100;
-    private const uint DirectTimelockOffset = 50;
-
     /// <summary>
     /// Select leaves that exactly cover the target amount. If no exact match exists,
     /// triggers a leaf swap via SSP to split leaves into the required denominations.
@@ -191,12 +188,8 @@ public static class SwapService
             var refundTxBytes = node.RefundTx.Length > 0
                 ? node.RefundTx.ToByteArray()
                 : node.NodeTx.ToByteArray();
-            var currentSequence = ClaimService.ParseInputSequence(refundTxBytes);
-            var currentTimelock = currentSequence & 0xFFFF;
-            var bit30 = currentSequence & (1u << 30);
-            var nextTimelock = currentTimelock - TimeLockInterval;
-            var cpfpSequence = bit30 | nextTimelock;
-            var directSequence = bit30 | (nextTimelock + DirectTimelockOffset);
+            var (cpfpSequence, directSequence) = TimelockHelper.ComputeNextSequences(
+                refundTxBytes, "swap.batch", leaf.Id);
 
             var nodeTxBytes = node.NodeTx.ToByteArray();
             var directNodeTx = node.DirectTx.Length > 0 ? node.DirectTx.ToByteArray() : null;

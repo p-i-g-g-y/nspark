@@ -1,4 +1,5 @@
 using NSpark.Proto;
+using NSpark.Services;
 
 namespace NSpark.Models;
 
@@ -17,4 +18,11 @@ public sealed record SparkLeaf(string Id, string TreeId, long ValueSats, string 
     /// of the public NSpark API contract.
     /// </summary>
     internal TreeNode Node { get; init; } = null!;
+
+    /// <summary>
+    /// Remaining refund-tx timelock in blocks. Below 200 the leaf needs
+    /// renewal; at or below 100 it cannot move at all until renewed. See
+    /// <c>RenewalService.RenewExhaustedLeavesAsync</c>.
+    /// </summary>
+    public uint RefundTimelockBlocks => ClaimService.ExtractRefundSequence(Node) & 0xFFFF;
 }

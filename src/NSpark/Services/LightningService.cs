@@ -253,10 +253,8 @@ public static class LightningService
     }
 
     // JS SDK constants for sequence computation
-    private const uint TimeLockInterval = 100;
     private const uint HtlcTimelockOffset = 70;
     private const uint DirectHtlcTimelockOffset = 85;
-    private const uint DirectTimelockOffset = 50;
     private const uint LightningHtlcSequence = 2160;
     // DEFAULT_FEE_SATS = ESTIMATED_TX_SIZE(191) * DEFAULT_SATS_PER_VBYTE(5)
     private const ulong DefaultFeeSats = SparkConstants.DefaultRefundFeeSats;
@@ -346,10 +344,10 @@ public static class LightningService
             var refundTxBytes = node.RefundTx.Length > 0
                 ? node.RefundTx.ToByteArray()
                 : nodeTxBytes;
-            var currentSequence = ClaimService.ParseInputSequence(refundTxBytes);
-            var currentTimelock = currentSequence & 0xFFFF;
-            var bit30 = currentSequence & (1u << 30);
-            var nextTimelock = currentTimelock - TimeLockInterval;
+            var (cpfpSeq, _) = TimelockHelper.ComputeNextSequences(
+                refundTxBytes, "lightning.pay", leaf.Id);
+            var bit30 = cpfpSeq & (1u << 30);
+            var nextTimelock = cpfpSeq & 0xFFFF;
             var htlcSeq = bit30 | (nextTimelock + HtlcTimelockOffset);
             var htlcDirectSeq = bit30 | (nextTimelock + DirectHtlcTimelockOffset);
 
@@ -482,14 +480,8 @@ public static class LightningService
             var refundTxBytes = node.RefundTx.Length > 0
                 ? node.RefundTx.ToByteArray()
                 : nodeTxBytes;
-            var currentSequence = ClaimService.ParseInputSequence(refundTxBytes);
-
-            // Use ConstructRefundTxTrio for proper decremented-timelock refund txs
-            var currentTimelock = currentSequence & 0xFFFF;
-            var bit30 = currentSequence & (1u << 30);
-            var nextTimelock = currentTimelock - TimeLockInterval;
-            var normalSeq = bit30 | nextTimelock;
-            var normalDirectSeq = bit30 | (nextTimelock + DirectTimelockOffset);
+            var (normalSeq, normalDirectSeq) = TimelockHelper.ComputeNextSequences(
+                refundTxBytes, "lightning.pay", leaf.Id);
 
             var refundTrio = SparkTxBuilder.BuildRefundTxTrio(
                 cpfpNodeTx: nodeTxBytes,

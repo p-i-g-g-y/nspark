@@ -9,9 +9,6 @@ namespace NSpark.Services;
 /// <inheritdoc/>
 public static class WithdrawalService
 {
-    private const uint TimeLockInterval = 100;
-    private const uint DirectTimelockOffset = 50;
-
     /// <summary>
     /// Get a fee estimate for an on-chain withdrawal (cooperative exit).
     /// </summary>
@@ -97,12 +94,8 @@ public static class WithdrawalService
             var refundTxBytes = node.RefundTx.Length > 0
                 ? node.RefundTx.ToByteArray()
                 : node.NodeTx.ToByteArray();
-            var rawSequence = ClaimService.ParseInputSequence(refundTxBytes);
-            var currentTimelock = rawSequence & 0xFFFF;
-            var bit30 = rawSequence & (1u << 30);
-            var nextTimelock = currentTimelock - TimeLockInterval;
-            var cpfpSequence = bit30 | nextTimelock;
-            var directSequence = bit30 | (nextTimelock + DirectTimelockOffset);
+            var (cpfpSequence, directSequence) = TimelockHelper.ComputeNextSequences(
+                refundTxBytes, "withdrawal.withdraw", leaf.Id);
 
             var cpfpNodeTx = node.NodeTx.ToByteArray();
             var directNodeTx = node.DirectTx.Length > 0 ? node.DirectTx.ToByteArray() : null;

@@ -62,8 +62,10 @@ mutation:
 The 7-day expiry is intentional: if for some reason the SSP fails to
 broadcast or the broadcast fails, the wallet can use the pre-signed
 refund transactions to spend the leaves on-chain unilaterally after the
-expiry. NSpark does not expose the unilateral-exit path directly in
-v0.1.x — file an issue if you need it for your use case.
+expiry. `GetRecoverySnapshotAsync()` captures everything besides the
+seed that a unilateral exit needs — see
+[docs/recovery.md](recovery.md) for snapshots, leaf renewal, and
+consolidation.
 
 ## Selecting which leaves to spend
 

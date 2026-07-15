@@ -8,8 +8,6 @@ namespace NSpark.Services;
 /// <inheritdoc/>
 public static class TransferService
 {
-    private const uint TimeLockInterval = 100;
-    private const uint DirectTimelockOffset = 50;
     /// <summary>
     /// Send a Spark transfer to another wallet's identity public key.
     /// Uses the TransferPackage flow (start_transfer_v2) with FROST threshold signing.
@@ -83,12 +81,8 @@ public static class TransferService
             var refundTxBytes = node.RefundTx.Length > 0
                 ? node.RefundTx.ToByteArray()
                 : nodeTxBytes;
-            var currentSequence = ClaimService.ParseInputSequence(refundTxBytes);
-            var currentTimelock = currentSequence & 0xFFFF;
-            var bit30 = currentSequence & (1u << 30);
-            var nextTimelock = currentTimelock - TimeLockInterval;
-            var normalSeq = bit30 | nextTimelock;
-            var normalDirectSeq = bit30 | (nextTimelock + DirectTimelockOffset);
+            var (normalSeq, normalDirectSeq) = TimelockHelper.ComputeNextSequences(
+                refundTxBytes, "transfer.send", leaf.Id);
 
             // Commitments are interleaved: [leaf0_cpfp, leaf1_cpfp, ..., leaf0_direct, leaf1_direct, ..., leaf0_dfcpfp, leaf1_dfcpfp, ...]
             var cpfpCommitments = allCommitments[i].SigningNonceCommitments;

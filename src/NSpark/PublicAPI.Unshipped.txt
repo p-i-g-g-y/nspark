@@ -57,6 +57,11 @@ NSpark.Exceptions.SparkException.CorrelationId.init -> void
 NSpark.Exceptions.SparkException.Operation.get -> string!
 NSpark.Exceptions.SparkException.SparkException(string! operation, string! message) -> void
 NSpark.Exceptions.SparkException.SparkException(string! operation, string! message, System.Exception! innerException) -> void
+NSpark.Exceptions.SparkLeafTimelockExhaustedException
+NSpark.Exceptions.SparkLeafTimelockExhaustedException.LeafId.get -> string?
+NSpark.Exceptions.SparkLeafTimelockExhaustedException.LeafId.init -> void
+NSpark.Exceptions.SparkLeafTimelockExhaustedException.SparkLeafTimelockExhaustedException(string! operation, string! message) -> void
+NSpark.Exceptions.SparkLeafTimelockExhaustedException.SparkLeafTimelockExhaustedException(string! operation, string! message, System.Exception! innerException) -> void
 NSpark.Exceptions.SparkLightningException
 NSpark.Exceptions.SparkLightningException.SparkLightningException(string! operation, string! message) -> void
 NSpark.Exceptions.SparkLightningException.SparkLightningException(string! operation, string! message, System.Exception! innerException) -> void
@@ -172,6 +177,7 @@ NSpark.Models.SparkLeaf.Deconstruct(out string! Id, out string! TreeId, out long
 NSpark.Models.SparkLeaf.Equals(NSpark.Models.SparkLeaf? other) -> bool
 NSpark.Models.SparkLeaf.Id.get -> string!
 NSpark.Models.SparkLeaf.Id.init -> void
+NSpark.Models.SparkLeaf.RefundTimelockBlocks.get -> uint
 NSpark.Models.SparkLeaf.SparkLeaf(string! Id, string! TreeId, long ValueSats, string! Status) -> void
 NSpark.Models.SparkLeaf.Status.get -> string!
 NSpark.Models.SparkLeaf.Status.init -> void
@@ -179,6 +185,71 @@ NSpark.Models.SparkLeaf.TreeId.get -> string!
 NSpark.Models.SparkLeaf.TreeId.init -> void
 NSpark.Models.SparkLeaf.ValueSats.get -> long
 NSpark.Models.SparkLeaf.ValueSats.init -> void
+NSpark.Models.SparkLeafConsolidation
+NSpark.Models.SparkLeafConsolidation.<Clone>$() -> NSpark.Models.SparkLeafConsolidation!
+NSpark.Models.SparkLeafConsolidation.Deconstruct(out int LeavesBefore, out int LeavesAfter, out long TotalSatsBefore, out long TotalSatsAfter, out int Rounds, out int SkippedLeaves) -> void
+NSpark.Models.SparkLeafConsolidation.Equals(NSpark.Models.SparkLeafConsolidation? other) -> bool
+NSpark.Models.SparkLeafConsolidation.FeeSats.get -> long
+NSpark.Models.SparkLeafConsolidation.LeavesAfter.get -> int
+NSpark.Models.SparkLeafConsolidation.LeavesAfter.init -> void
+NSpark.Models.SparkLeafConsolidation.LeavesBefore.get -> int
+NSpark.Models.SparkLeafConsolidation.LeavesBefore.init -> void
+NSpark.Models.SparkLeafConsolidation.Rounds.get -> int
+NSpark.Models.SparkLeafConsolidation.Rounds.init -> void
+NSpark.Models.SparkLeafConsolidation.SkippedLeaves.get -> int
+NSpark.Models.SparkLeafConsolidation.SkippedLeaves.init -> void
+NSpark.Models.SparkLeafConsolidation.SparkLeafConsolidation(int LeavesBefore, int LeavesAfter, long TotalSatsBefore, long TotalSatsAfter, int Rounds, int SkippedLeaves) -> void
+NSpark.Models.SparkLeafConsolidation.TotalSatsAfter.get -> long
+NSpark.Models.SparkLeafConsolidation.TotalSatsAfter.init -> void
+NSpark.Models.SparkLeafConsolidation.TotalSatsBefore.get -> long
+NSpark.Models.SparkLeafConsolidation.TotalSatsBefore.init -> void
+NSpark.Models.SparkLeafRenewal
+NSpark.Models.SparkLeafRenewal.<Clone>$() -> NSpark.Models.SparkLeafRenewal!
+NSpark.Models.SparkLeafRenewal.Checked.get -> int
+NSpark.Models.SparkLeafRenewal.Checked.init -> void
+NSpark.Models.SparkLeafRenewal.Deconstruct(out int Checked, out int Renewed, out System.Collections.Generic.IReadOnlyList<string!>! Failures) -> void
+NSpark.Models.SparkLeafRenewal.Equals(NSpark.Models.SparkLeafRenewal? other) -> bool
+NSpark.Models.SparkLeafRenewal.Failures.get -> System.Collections.Generic.IReadOnlyList<string!>!
+NSpark.Models.SparkLeafRenewal.Failures.init -> void
+NSpark.Models.SparkLeafRenewal.Renewed.get -> int
+NSpark.Models.SparkLeafRenewal.Renewed.init -> void
+NSpark.Models.SparkLeafRenewal.SparkLeafRenewal(int Checked, int Renewed, System.Collections.Generic.IReadOnlyList<string!>! Failures) -> void
+NSpark.Models.SparkRecoveryLeaf
+NSpark.Models.SparkRecoveryLeaf.<Clone>$() -> NSpark.Models.SparkRecoveryLeaf!
+NSpark.Models.SparkRecoveryLeaf.Deconstruct(out string! Id, out string! Status, out long ValueSats, out string! TreeNodeHex) -> void
+NSpark.Models.SparkRecoveryLeaf.Equals(NSpark.Models.SparkRecoveryLeaf? other) -> bool
+NSpark.Models.SparkRecoveryLeaf.Id.get -> string!
+NSpark.Models.SparkRecoveryLeaf.Id.init -> void
+NSpark.Models.SparkRecoveryLeaf.SparkRecoveryLeaf(string! Id, string! Status, long ValueSats, string! TreeNodeHex) -> void
+NSpark.Models.SparkRecoveryLeaf.Status.get -> string!
+NSpark.Models.SparkRecoveryLeaf.Status.init -> void
+NSpark.Models.SparkRecoveryLeaf.TreeNodeHex.get -> string!
+NSpark.Models.SparkRecoveryLeaf.TreeNodeHex.init -> void
+NSpark.Models.SparkRecoveryLeaf.ValueSats.get -> long
+NSpark.Models.SparkRecoveryLeaf.ValueSats.init -> void
+NSpark.Models.SparkRecoveryNode
+NSpark.Models.SparkRecoveryNode.<Clone>$() -> NSpark.Models.SparkRecoveryNode!
+NSpark.Models.SparkRecoveryNode.Deconstruct(out string! Id, out string! TreeNodeHex) -> void
+NSpark.Models.SparkRecoveryNode.Equals(NSpark.Models.SparkRecoveryNode? other) -> bool
+NSpark.Models.SparkRecoveryNode.Id.get -> string!
+NSpark.Models.SparkRecoveryNode.Id.init -> void
+NSpark.Models.SparkRecoveryNode.SparkRecoveryNode(string! Id, string! TreeNodeHex) -> void
+NSpark.Models.SparkRecoveryNode.TreeNodeHex.get -> string!
+NSpark.Models.SparkRecoveryNode.TreeNodeHex.init -> void
+NSpark.Models.SparkRecoverySnapshot
+NSpark.Models.SparkRecoverySnapshot.<Clone>$() -> NSpark.Models.SparkRecoverySnapshot!
+NSpark.Models.SparkRecoverySnapshot.Deconstruct(out string! Network, out string! IdentityPublicKeyHex, out System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryLeaf!>! Leaves, out System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryNode!>! Nodes) -> void
+NSpark.Models.SparkRecoverySnapshot.Equals(NSpark.Models.SparkRecoverySnapshot? other) -> bool
+NSpark.Models.SparkRecoverySnapshot.IdentityPublicKeyHex.get -> string!
+NSpark.Models.SparkRecoverySnapshot.IdentityPublicKeyHex.init -> void
+NSpark.Models.SparkRecoverySnapshot.Leaves.get -> System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryLeaf!>!
+NSpark.Models.SparkRecoverySnapshot.Leaves.init -> void
+NSpark.Models.SparkRecoverySnapshot.Network.get -> string!
+NSpark.Models.SparkRecoverySnapshot.Network.init -> void
+NSpark.Models.SparkRecoverySnapshot.Nodes.get -> System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryNode!>!
+NSpark.Models.SparkRecoverySnapshot.Nodes.init -> void
+NSpark.Models.SparkRecoverySnapshot.SparkRecoverySnapshot(string! Network, string! IdentityPublicKeyHex, System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryLeaf!>! Leaves, System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkRecoveryNode!>! Nodes) -> void
+NSpark.Models.SparkRecoverySnapshot.TotalLeafSats.get -> long
 NSpark.Models.SparkTransfer
 NSpark.Models.SparkTransfer.<Clone>$() -> NSpark.Models.SparkTransfer!
 NSpark.Models.SparkTransfer.CreatedAt.get -> System.DateTimeOffset
@@ -334,11 +405,14 @@ NSpark.ServiceCollectionExtensions
 NSpark.Services.BalanceService
 NSpark.Services.Bech32mHelper
 NSpark.Services.ClaimService
+NSpark.Services.ConsolidationService
 NSpark.Services.DepositService
 NSpark.Services.EventService
 NSpark.Services.LightningAddressService
 NSpark.Services.LightningService
 NSpark.Services.PrivacyService
+NSpark.Services.RecoveryService
+NSpark.Services.RenewalService
 NSpark.Services.SparkAddress
 NSpark.Services.SparkBitcoinTx
 NSpark.Services.SparkBitcoinTx.<Clone>$() -> NSpark.Services.SparkBitcoinTx!
@@ -616,6 +690,21 @@ override NSpark.Models.SparkEvent.ToString() -> string!
 override NSpark.Models.SparkLeaf.Equals(object? obj) -> bool
 override NSpark.Models.SparkLeaf.GetHashCode() -> int
 override NSpark.Models.SparkLeaf.ToString() -> string!
+override NSpark.Models.SparkLeafConsolidation.Equals(object? obj) -> bool
+override NSpark.Models.SparkLeafConsolidation.GetHashCode() -> int
+override NSpark.Models.SparkLeafConsolidation.ToString() -> string!
+override NSpark.Models.SparkLeafRenewal.Equals(object? obj) -> bool
+override NSpark.Models.SparkLeafRenewal.GetHashCode() -> int
+override NSpark.Models.SparkLeafRenewal.ToString() -> string!
+override NSpark.Models.SparkRecoveryLeaf.Equals(object? obj) -> bool
+override NSpark.Models.SparkRecoveryLeaf.GetHashCode() -> int
+override NSpark.Models.SparkRecoveryLeaf.ToString() -> string!
+override NSpark.Models.SparkRecoveryNode.Equals(object? obj) -> bool
+override NSpark.Models.SparkRecoveryNode.GetHashCode() -> int
+override NSpark.Models.SparkRecoveryNode.ToString() -> string!
+override NSpark.Models.SparkRecoverySnapshot.Equals(object? obj) -> bool
+override NSpark.Models.SparkRecoverySnapshot.GetHashCode() -> int
+override NSpark.Models.SparkRecoverySnapshot.ToString() -> string!
 override NSpark.Models.SparkTransfer.Equals(object? obj) -> bool
 override NSpark.Models.SparkTransfer.GetHashCode() -> int
 override NSpark.Models.SparkTransfer.ToString() -> string!
@@ -729,6 +818,16 @@ static NSpark.Models.SparkEvent.operator !=(NSpark.Models.SparkEvent? left, NSpa
 static NSpark.Models.SparkEvent.operator ==(NSpark.Models.SparkEvent? left, NSpark.Models.SparkEvent? right) -> bool
 static NSpark.Models.SparkLeaf.operator !=(NSpark.Models.SparkLeaf? left, NSpark.Models.SparkLeaf? right) -> bool
 static NSpark.Models.SparkLeaf.operator ==(NSpark.Models.SparkLeaf? left, NSpark.Models.SparkLeaf? right) -> bool
+static NSpark.Models.SparkLeafConsolidation.operator !=(NSpark.Models.SparkLeafConsolidation? left, NSpark.Models.SparkLeafConsolidation? right) -> bool
+static NSpark.Models.SparkLeafConsolidation.operator ==(NSpark.Models.SparkLeafConsolidation? left, NSpark.Models.SparkLeafConsolidation? right) -> bool
+static NSpark.Models.SparkLeafRenewal.operator !=(NSpark.Models.SparkLeafRenewal? left, NSpark.Models.SparkLeafRenewal? right) -> bool
+static NSpark.Models.SparkLeafRenewal.operator ==(NSpark.Models.SparkLeafRenewal? left, NSpark.Models.SparkLeafRenewal? right) -> bool
+static NSpark.Models.SparkRecoveryLeaf.operator !=(NSpark.Models.SparkRecoveryLeaf? left, NSpark.Models.SparkRecoveryLeaf? right) -> bool
+static NSpark.Models.SparkRecoveryLeaf.operator ==(NSpark.Models.SparkRecoveryLeaf? left, NSpark.Models.SparkRecoveryLeaf? right) -> bool
+static NSpark.Models.SparkRecoveryNode.operator !=(NSpark.Models.SparkRecoveryNode? left, NSpark.Models.SparkRecoveryNode? right) -> bool
+static NSpark.Models.SparkRecoveryNode.operator ==(NSpark.Models.SparkRecoveryNode? left, NSpark.Models.SparkRecoveryNode? right) -> bool
+static NSpark.Models.SparkRecoverySnapshot.operator !=(NSpark.Models.SparkRecoverySnapshot? left, NSpark.Models.SparkRecoverySnapshot? right) -> bool
+static NSpark.Models.SparkRecoverySnapshot.operator ==(NSpark.Models.SparkRecoverySnapshot? left, NSpark.Models.SparkRecoverySnapshot? right) -> bool
 static NSpark.Models.SparkTransfer.operator !=(NSpark.Models.SparkTransfer? left, NSpark.Models.SparkTransfer? right) -> bool
 static NSpark.Models.SparkTransfer.operator ==(NSpark.Models.SparkTransfer? left, NSpark.Models.SparkTransfer? right) -> bool
 static NSpark.Models.StaticDepositAddress.operator !=(NSpark.Models.StaticDepositAddress? left, NSpark.Models.StaticDepositAddress? right) -> bool
@@ -759,6 +858,7 @@ static NSpark.Services.BalanceService.GetLeavesAsync(this NSpark.SparkWallet! wa
 static NSpark.Services.Bech32mHelper.Decode(string! bech32m, int limit = 90) -> (string! Hrp, byte[]! Data)
 static NSpark.Services.Bech32mHelper.Encode(string! hrp, byte[]! data) -> string!
 static NSpark.Services.ClaimService.ClaimPendingTransfersAsync(this NSpark.SparkWallet! wallet, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<NSpark.Models.SparkTransfer!>!>!
+static NSpark.Services.ConsolidationService.ConsolidateLeavesAsync(this NSpark.SparkWallet! wallet, int maxLeavesPerRound = 100, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.SparkLeafConsolidation!>!
 static NSpark.Services.DepositService.BroadcastTransactionAsync(this NSpark.SparkWallet! wallet, string! txHex, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
 static NSpark.Services.DepositService.ClaimDepositAsync(this NSpark.SparkWallet! wallet, string! depositTxId, uint vout = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static NSpark.Services.DepositService.ClaimStaticDepositAsync(this NSpark.SparkWallet! wallet, string! transactionId, uint outputIndex = 0, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
@@ -778,6 +878,8 @@ static NSpark.Services.LightningService.GetLightningSendStatusAsync(this NSpark.
 static NSpark.Services.LightningService.PayLightningInvoiceAsync(this NSpark.SparkWallet! wallet, string! paymentRequest, long? maxFeeSats = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
 static NSpark.Services.PrivacyService.GetWalletSettingsAsync(this NSpark.SparkWallet! wallet, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.WalletSettings!>!
 static NSpark.Services.PrivacyService.SetPrivacyEnabledAsync(this NSpark.SparkWallet! wallet, bool enabled, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.WalletSettings!>!
+static NSpark.Services.RecoveryService.GetRecoverySnapshotAsync(this NSpark.SparkWallet! wallet, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.SparkRecoverySnapshot!>!
+static NSpark.Services.RenewalService.RenewExhaustedLeavesAsync(this NSpark.SparkWallet! wallet, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<NSpark.Models.SparkLeafRenewal!>!
 static NSpark.Services.SparkAddress.DecodeIdentityPublicKey(string! sparkAddress) -> byte[]!
 static NSpark.Services.SparkBitcoinTx.operator !=(NSpark.Services.SparkBitcoinTx? left, NSpark.Services.SparkBitcoinTx? right) -> bool
 static NSpark.Services.SparkBitcoinTx.operator ==(NSpark.Services.SparkBitcoinTx? left, NSpark.Services.SparkBitcoinTx? right) -> bool
